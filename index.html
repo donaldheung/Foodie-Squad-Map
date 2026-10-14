@@ -4,94 +4,218 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>為食兵團供應商名錄</title>
-    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Leaflet CSS & JS for Map -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <style>
-        #map { height: 400px; width: 100%; border-radius: 0.75rem; }
-    </style>
+    <style> #map { height: 400px; width: 100%; border-radius: 0.75rem; } </style>
 </head>
-<body class="bg-slate-50 text-slate-800 font-sans antialiased">
+<body class="bg-slate-50 text-slate-800 font-sans">
 
-    <!-- 登入頁面 Modal -->
+    <!-- 登入 Modal -->
     <div id="login-modal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
         <div class="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-6">
             <div class="text-center">
                 <span class="text-4xl">🛡️</span>
                 <h2 class="text-2xl font-bold mt-2 text-slate-900">為食兵團供應商名錄</h2>
-                <p class="text-sm text-slate-500 mt-1">請選擇您的兵團身份登入</p>
+                <p class="text-sm text-slate-500 mt-1">請選擇身份登入</p>
             </div>
             <div class="space-y-4">
                 <div>
                     <label class="block text-sm font-medium text-slate-700">選擇帳戶</label>
                     <select id="login-user" class="mt-1 block w-full rounded-lg border border-slate-300 p-2.5 bg-slate-50">
-                        <option value="Donald">總司令 (Donald)</option>
-                        <option value="Agnes">團長 (Agnes)</option>
+                        <option value="">載入帳號中...</option>
                     </select>
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-slate-700">安全 PIN 碼</label>
-                    <input type="password" id="login-pin" placeholder="請輸入 4 位數 PIN 碼" class="mt-1 block w-full rounded-lg border border-slate-300 p-2.5 bg-slate-50">
+                    <input type="password" id="login-pin" placeholder="請輸入 PIN 碼" class="mt-1 block w-full rounded-lg border border-slate-300 p-2.5 bg-slate-50">
                 </div>
-                <button onclick="handleLogin()" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-medium py-2.5 rounded-lg transition shadow-md">
+                <button onclick="handleLogin()" id="login-btn" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-medium py-2.5 rounded-lg transition shadow-md">
                     進入兵團基地
                 </button>
-                <p id="login-error" class="text-red-500 text-sm text-center hidden">帳號或 PIN 碼錯誤</p>
+                <p id="login-error" class="text-red-500 text-sm text-center hidden"></p>
             </div>
         </div>
     </div>
 
-    <!-- 主應用程式介面 -->
+    <!-- 主介面 -->
     <div id="app-container" class="max-w-4xl mx-auto p-4 pb-24 hidden">
-        <!-- 頂部導航列 -->
         <header class="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm mb-6 border border-slate-100">
             <div>
-                <h1 class="text-xl font-bold text-slate-900 flex items-center gap-2">
-                    <span>🛡️</span> 為食兵團供應商名錄
-                </h1>
+                <h1 class="text-xl font-bold text-slate-900 flex items-center gap-2"><span>🛡️</span> 為食兵團供應商名錄</h1>
                 <p class="text-xs text-slate-500 mt-0.5">當前身份：<span id="current-role-badge" class="font-semibold text-amber-600"></span></p>
             </div>
-            <button onclick="logout()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg transition">
-                切換身份
-            </button>
+            <button onclick="location.reload()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg">切換身份</button>
         </header>
 
-        <!-- 功能標籤切換 -->
         <div class="flex bg-slate-200/70 p-1 rounded-xl mb-6">
-            <button onclick="switchTab('list')" id="tab-list-btn" class="flex-1 py-2 rounded-lg text-sm font-medium transition bg-white text-slate-900 shadow-sm">📋 餐廳清單</button>
-            <button onclick="switchTab('add')" id="tab-add-btn" class="flex-1 py-2 rounded-lg text-sm font-medium transition text-slate-600">➕ 新增餐廳</button>
-            <button onclick="switchTab('map')" id="tab-map-btn" class="flex-1 py-2 rounded-lg text-sm font-medium transition text-slate-600">🗺️ 美食地圖</button>
+            <button onclick="switchTab('list')" id="tab-list-btn" class="flex-1 py-2 rounded-lg text-sm font-medium bg-white text-slate-900 shadow-sm">📋 餐廳清單</button>
+            <button onclick="switchTab('add')" id="tab-add-btn" class="flex-1 py-2 rounded-lg text-sm font-medium text-slate-600">➕ 新增餐廳</button>
+            <button onclick="switchTab('map')" id="tab-map-btn" class="flex-1 py-2 rounded-lg text-sm font-medium text-slate-600">🗺️ 美食地圖</button>
         </div>
 
-        <!-- 1. 餐廳清單區 -->
         <div id="section-list" class="space-y-4">
-            <!-- 篩選與抽籤工具列 -->
-            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 space-y-3">
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    <select id="filter-city" onchange="renderList()" class="rounded-lg border border-slate-200 p-2 text-sm bg-slate-50">
-                        <option value="">全部城市</option>
-                        <option value="澳門">澳門</option>
-                        <option value="珠海">珠海</option>
-                    </select>
-                    <select id="filter-status" onchange="renderList()" class="rounded-lg border border-slate-200 p-2 text-sm bg-slate-50">
-                        <option value="">全部狀態</option>
-                        <option value="待試">⏳ 待試名單</option>
-                        <option value="已試過">✨ 已試過</option>
-                    </select>
-                    <input type="text" id="filter-keyword" oninput="renderList()" placeholder="搜尋餐廳/種類..." class="rounded-lg border border-slate-200 p-2 text-sm bg-slate-50">
-                    <button onclick="triggerLottery()" class="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-sm font-medium rounded-lg py-2 shadow-sm transition flex items-center justify-center gap-1">
-                        <span>🎰</span> 今日盲盒抽籤
-                    </button>
-                </div>
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 grid grid-cols-2 md:grid-cols-4 gap-2">
+                <select id="filter-city" onchange="renderList()" class="rounded-lg border p-2 text-sm bg-slate-50"><option value="">全部城市</option><option value="澳門">澳門</option><option value="珠海">珠海</option></select>
+                <select id="filter-status" onchange="renderList()" class="rounded-lg border p-2 text-sm bg-slate-50"><option value="">全部狀態</option><option value="待試">⏳ 待試名單</option><option value="已試過">✨ 已試過</option></select>
+                <input type="text" id="filter-keyword" oninput="renderList()" placeholder="搜尋..." class="rounded-lg border p-2 text-sm bg-slate-50">
+                <button onclick="triggerLottery()" class="bg-amber-500 text-white text-sm rounded-lg py-2">🎰 盲盒抽籤</button>
             </div>
-
-            <!-- 清單容器 -->
-            <div id="restaurant-cards" class="space-y-4">
-                <!-- 動態載入卡片 -->
-            </div>
+            <div id="restaurant-cards" class="space-y-4"></div>
         </div>
 
-        <!-- 2. 資料輸入區 -->
-        <div id="section-add" class="bg-white p-6 rounded-2
+        <div id="section-add" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hidden space-y-4">
+            <h2 class="text-lg font-bold border-b pb-2">新增目標餐廳</h2>
+            <form id="add-form" onsubmit="submitRestaurant(event)" class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div><label class="text-sm font-medium">餐廳名稱 *</label><input type="text" id="input-name" required class="w-full border p-2.5 rounded-lg text-sm mt-1"></div>
+                    <div><label class="text-sm font-medium">城市</label><select id="input-city" class="w-full border p-2.5 rounded-lg text-sm mt-1 bg-slate-50"><option value="澳門">澳門</option><option value="珠海">珠海</option></select></div>
+                    <div><label class="text-sm font-medium">細分區域</label><input type="text" id="input-district" class="w-full border p-2.5 rounded-lg text-sm mt-1"></div>
+                    <div><label class="text-sm font-medium">菜式種類</label><input type="text" id="input-type" class="w-full border p-2.5 rounded-lg text-sm mt-1"></div>
+                    <div class="md:col-span-2"><label class="text-sm font-medium">詳細地址</label><input type="text" id="input-address" class="w-full border p-2.5 rounded-lg text-sm mt-1"></div>
+                    <div><label class="text-sm font-medium">營業時間</label><input type="text" id="input-hours" class="w-full border p-2.5 rounded-lg text-sm mt-1"></div>
+                    <div><label class="text-sm font-medium">聯絡電話</label><input type="text" id="input-phone" class="w-full border p-2.5 rounded-lg text-sm mt-1"></div>
+                </div>
+                <button type="submit" class="w-full bg-amber-600 text-white font-medium py-3 rounded-xl">確認新增</button>
+            </form>
+        </div>
+
+        <div id="section-map" class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 hidden">
+            <div id="map"></div>
+        </div>
+    </div>
+
+    <script>
+        // 請在此處貼上你「新建部署」後取得的新 URL
+        const GAS_URL = 'YOUR_NEW_GAS_WEB_APP_URL';
+
+        let currentUser = null;
+        let currentRoleTitle = '';
+        let restaurantsData = [];
+
+        // 網頁載入時動態從 Google Sheet 抓取 Users 列表
+        window.onload = function() {
+            fetch(`${GAS_URL}?action=getUsers`)
+            .then(res => res.json())
+            .then(res => {
+                const select = document.getElementById('login-user');
+                if (res.status === 'success' && res.users.length > 0) {
+                    select.innerHTML = res.users.map(u => {
+                        let title = u.username;
+                        if (u.username.toLowerCase() === 'donald') title = '總司令 (Donald)';
+                        if (u.username.toLowerCase() === 'agnes') title = '團長 (Agnes)';
+                        return `<option value="${u.username}">${title}</option>`;
+                    }).join('');
+                } else {
+                    select.innerHTML = `<option value="Donald">總司令 (Donald)</option><option value="Agnes">團長 (Agnes)</option>`;
+                }
+            }).catch(() => {
+                document.getElementById('login-user').innerHTML = `<option value="Donald">總司令 (Donald)</option><option value="Agnes">團長 (Agnes)</option>`;
+            });
+        };
+
+        function handleLogin() {
+            const user = document.getElementById('login-user').value;
+            const pin = document.getElementById('login-pin').value;
+            const errEl = document.getElementById('login-error');
+            const btn = document.getElementById('login-btn');
+
+            errEl.classList.add('hidden');
+            btn.innerText = '驗證中...';
+
+            fetch(`${GAS_URL}?action=login&username=${encodeURIComponent(user)}&pin=${encodeURIComponent(pin)}`)
+            .then(res => res.json())
+            .then(res => {
+                btn.innerText = '進入兵團基地';
+                if (res.status === 'success') {
+                    currentUser = res.username;
+                    currentRoleTitle = (currentUser.toLowerCase() === 'donald') ? '總司令 (Donald)' : (currentUser.toLowerCase() === 'agnes' ? '團長 (Agnes)' : currentUser);
+                    document.getElementById('current-role-badge').innerText = currentRoleTitle;
+                    document.getElementById('login-modal').classList.add('hidden');
+                    document.getElementById('app-container').classList.remove('hidden');
+                    loadData();
+                } else {
+                    errEl.innerText = res.message || 'PIN 碼錯誤';
+                    errEl.classList.remove('hidden');
+                }
+            }).catch(err => {
+                btn.innerText = '進入兵團基地';
+                errEl.innerText = '連線失敗，請檢查 GAS 部署權限是否設為 Anyone';
+                errEl.classList.remove('hidden');
+            });
+        }
+
+        function switchTab(tab) {
+            ['list', 'add', 'map'].forEach(t => document.getElementById(`section-${t}`).classList.add('hidden'));
+            document.getElementById(`section-${tab}`).classList.remove('hidden');
+        }
+
+        function loadData() {
+            fetch(`${GAS_URL}?action=getData`)
+            .then(res => res.json())
+            .then(res => {
+                if (res.status === 'success') {
+                    restaurantsData = res.data;
+                    renderList();
+                }
+            });
+        }
+
+        function renderList() {
+            const cityFilter = document.getElementById('filter-city').value;
+            const statusFilter = document.getElementById('filter-status').value;
+            const keyword = document.getElementById('filter-keyword').value.toLowerCase();
+            const container = document.getElementById('restaurant-cards');
+
+            const filtered = restaurantsData.filter(item => {
+                const matchCity = !cityFilter || item.city === cityFilter;
+                const matchStatus = !statusFilter || item.status === statusFilter;
+                const matchKw = !keyword || (item.name && item.name.toLowerCase().includes(keyword));
+                return matchCity && matchStatus && matchKw;
+            });
+
+            if (filtered.length === 0) {
+                container.innerHTML = `<div class="text-center py-8 text-slate-400 bg-white rounded-2xl">暫無資料</div>`;
+                return;
+            }
+
+            container.innerHTML = filtered.map(item => `
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 space-y-3">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <span class="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">${item.city || '澳門'} · ${item.district || '未分類'}</span>
+                            <h3 class="text-lg font-bold mt-1">${item.name}</h3>
+                            <p class="text-xs text-slate-500">${item.type || '美食'} | 📞 ${item.phone || '無'} | 🕒 ${item.hours || '未填'}</p>
+                        </div>
+                        <span class="text-xs px-2.5 py-1 rounded-full ${item.status === '已試過' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100'}">${item.status || '待試'} (${item.visit_count || 0}次)</span>
+                    </div>
+                    <p class="text-sm text-slate-600 bg-slate-50 p-2 rounded-xl">📍 ${item.address || '無地址'}</p>
+                    ${item.status === '已試過' ? `
+                        <div class="grid grid-cols-2 gap-2 text-xs pt-1">
+                            <div class="bg-amber-50 p-2 rounded-lg"><b>🛡️ 總司令 (Donald):</b> ⭐${item.donald_rating || 0}/5<br><span class="italic">"${item.donald_comment || '無'}"</span></div>
+                            <div class="bg-rose-50 p-2 rounded-lg"><b>👑 團長 (Agnes):</b> ⭐${item.agnes_rating || 0}/5<br><span class="italic">"${item.agnes_comment || '無'}"</span></div>
+                        </div>
+                    ` : ''}
+                </div>
+            `).join('');
+        }
+
+        function submitRestaurant(event) {
+            event.preventDefault();
+            const payload = {
+                action: 'addRestaurant',
+                name: document.getElementById('input-name').value,
+                city: document.getElementById('input-city').value,
+                district: document.getElementById('input-district').value,
+                type: document.getElementById('input-type').value,
+                address: document.getElementById('input-address').value,
+                hours: document.getElementById('input-hours').value,
+                phone: document.getElementById('input-phone').value,
+                created_by: currentRoleTitle
+            };
+            fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) })
+            .then(() => { alert('已新增！'); document.getElementById('add-form').reset(); switchTab('list'); loadData(); });
+        }
+    </script>
+</body>
+</html>
