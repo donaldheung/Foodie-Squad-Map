@@ -158,31 +158,11 @@
                 <div>
                     <label class="text-xs font-medium">評分星級 (點擊左/右半邊選半星或滿星)</label>
                     <div class="flex items-center gap-1 mt-1" id="star-container">
-                        <div class="star-item" id="star-1">
-                            <div class="half-left" onclick="setRating(0.5)"></div>
-                            <div class="half-right" onclick="setRating(1.0)"></div>
-                            <span class="star-icon">⭐</span>
-                        </div>
-                        <div class="star-item" id="star-2">
-                            <div class="half-left" onclick="setRating(1.5)"></div>
-                            <div class="half-right" onclick="setRating(2.0)"></div>
-                            <span class="star-icon">⭐</span>
-                        </div>
-                        <div class="star-item" id="star-3">
-                            <div class="half-left" onclick="setRating(2.5)"></div>
-                            <div class="half-right" onclick="setRating(3.0)"></div>
-                            <span class="star-icon">⭐</span>
-                        </div>
-                        <div class="star-item" id="star-4">
-                            <div class="half-left" onclick="setRating(3.5)"></div>
-                            <div class="half-right" onclick="setRating(4.0)"></div>
-                            <span class="star-icon">⭐</span>
-                        </div>
-                        <div class="star-item" id="star-5">
-                            <div class="half-left" onclick="setRating(4.5)"></div>
-                            <div class="half-right" onclick="setRating(5.0)"></div>
-                            <span class="star-icon">⭐</span>
-                        </div>
+                        <div class="star-item" id="star-1"><div class="half-left" onclick="setRating(0.5)"></div><div class="half-right" onclick="setRating(1.0)"></div><span class="star-icon">⭐</span></div>
+                        <div class="star-item" id="star-2"><div class="half-left" onclick="setRating(1.5)"></div><div class="half-right" onclick="setRating(2.0)"></div><span class="star-icon">⭐</span></div>
+                        <div class="star-item" id="star-3"><div class="half-left" onclick="setRating(2.5)"></div><div class="half-right" onclick="setRating(3.0)"></div><span class="star-icon">⭐</span></div>
+                        <div class="star-item" id="star-4"><div class="half-left" onclick="setRating(3.5)"></div><div class="half-right" onclick="setRating(4.0)"></div><span class="star-icon">⭐</span></div>
+                        <div class="star-item" id="star-5"><div class="half-left" onclick="setRating(4.5)"></div><div class="half-right" onclick="setRating(5.0)"></div><span class="star-icon">⭐</span></div>
                         <span id="rating-text" class="text-base font-bold ml-2 text-amber-600">5.0 星</span>
                     </div>
                     <input type="hidden" id="rating-score" value="5">
@@ -192,7 +172,7 @@
                     <textarea id="rating-comment" class="w-full border p-2 rounded text-sm mt-1" placeholder="寫下食後感..."></textarea>
                 </div>
                 <div>
-                    <label class="text-xs font-medium">上傳當次相片 (可多選)</label>
+                    <label class="text-xs font-medium">上傳當次相片 (高清原圖，可多選)</label>
                     <input type="file" accept="image/*" multiple class="w-full border p-1.5 rounded text-xs mt-1 bg-slate-50" onchange="handleRatingPhotos(this)">
                     <div id="rating-photo-preview" class="grid grid-cols-4 gap-2 mt-2"></div>
                 </div>
@@ -212,6 +192,14 @@
                 <button onclick="document.getElementById('history-modal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
             </div>
             <div id="history-content" class="space-y-3 max-h-64 overflow-y-auto"></div>
+        </div>
+    </div>
+
+    <!-- 圖片放大預覽燈箱 Modal -->
+    <div id="image-modal" class="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4 hidden" onclick="closeImageModal()">
+        <div class="relative max-w-4xl max-h-full">
+            <button onclick="closeImageModal()" class="absolute -top-10 right-0 text-white text-3xl font-bold">&times;</button>
+            <img id="modal-img" class="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl">
         </div>
     </div>
 
@@ -389,7 +377,7 @@
                                     📸 睇相片 (${photoCount}張) <span id="photo-arrow-${item.id}">▼</span>
                                 </button>
                                 <div id="photo-gallery-${item.id}" class="grid grid-cols-3 gap-2 mt-2 hidden">
-                                    ${item.photos.map(p => `<img src="${p}" class="w-full h-24 object-cover rounded-lg border">`).join('')}
+                                    ${item.photos.map(p => `<img src="${p}" onclick="openImageModal('${p}')" class="w-full h-24 object-cover rounded-lg border cursor-pointer hover:opacity-90 transition">`).join('')}
                                 </div>
                             </div>
                         ` : ''}
@@ -414,7 +402,7 @@
                                     item.comments.map(c => `
                                         <div class="bg-white p-2 rounded border border-slate-100 space-y-1">
                                             <div class="flex justify-between"><span class="font-semibold text-amber-800">${c.user}</span><span class="text-[9px] text-slate-400">${c.time}</span></div>
-                                            <div>${c.text}</div>${c.photo ? `<img src="${c.photo}" class="w-20 h-20 object-cover rounded mt-1 border">` : ''}
+                                            <div>${c.text}</div>${c.photo ? `<img src="${c.photo}" onclick="openImageModal('${c.photo}')" class="w-20 h-20 object-cover rounded mt-1 border cursor-pointer hover:opacity-90 transition">` : ''}
                                         </div>
                                     `).join('')
                                 }
@@ -451,6 +439,15 @@
                 gallery.classList.add('hidden');
                 arrow.innerText = '▼';
             }
+        }
+
+        function openImageModal(url) {
+            document.getElementById('modal-img').src = url;
+            document.getElementById('image-modal').classList.remove('hidden');
+        }
+
+        function closeImageModal() {
+            document.getElementById('image-modal').classList.add('hidden');
         }
 
         function getLatestRating(item, targetUser) {
@@ -544,10 +541,13 @@
         function handleRatingPhotos(input) {
             if (input.files && input.files.length > 0) {
                 Array.from(input.files).forEach(file => {
-                    compressFile(file, base64 => {
-                        ratingPhotosBase64.push(base64);
+                    // 保留高清原圖，僅轉化為 Base64 傳送到 GAS 由 Drive 儲存
+                    const reader = new FileReader();
+                    reader.onload = e => {
+                        ratingPhotosBase64.push(e.target.result);
                         renderRatingPhotoPreview();
-                    });
+                    };
+                    reader.readAsDataURL(file);
                 });
                 input.value = '';
             }
@@ -557,8 +557,8 @@
             const preview = document.getElementById('rating-photo-preview');
             preview.innerHTML = ratingPhotosBase64.map((img, idx) => `
                 <div class="relative group">
-                    <img src="${img}" class="w-full h-16 object-cover rounded-lg border">
-                    <button onclick="removeRatingPhoto(${idx})" class="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold shadow">✕</button>
+                    <img src="${img}" onclick="openImageModal('${img}')" class="w-full h-16 object-cover rounded-lg border cursor-pointer">
+                    <button onclick="removeRatingPhoto(${idx})" class="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold shadow z-10">✕</button>
                 </div>
             `).join('');
         }
@@ -570,35 +570,19 @@
 
         function encodeCommentImage(id, input) {
             if (input.files && input.files[0]) {
-                compressFile(input.files[0], base64 => { commentPhotoBase64[id] = base64; });
-            }
-        }
-
-        // 💡 強化壓縮：限制寬度最大 300px，質量壓到 0.4，確保體積極細，秒傳雲端不超限！
-        function compressFile(file, callback) {
-            const reader = new FileReader();
-            reader.onload = e => {
-                const img = new Image();
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    const MAX = 300; 
-                    const scale = MAX / img.width;
-                    canvas.width = MAX;
-                    canvas.height = img.height * scale;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                    callback(canvas.toDataURL('image/jpeg', 0.4));
+                const reader = new FileReader();
+                reader.onload = e => {
+                    commentPhotoBase64[id] = e.target.result;
                 };
-                img.src = e.target.result;
-            };
-            reader.readAsDataURL(file);
+                reader.readAsDataURL(input.files[0]);
+            }
         }
 
         function submitRating() {
             const btn = document.getElementById('rating-submit-btn');
             if (btn.disabled) return;
             btn.disabled = true;
-            btn.innerText = '提交中...';
+            btn.innerText = '上傳高清原圖至 Drive 中...';
 
             const item = restaurantsData.find(i => i.id === currentRatingRestId);
             const score = parseFloat(document.getElementById('rating-score').value);
@@ -619,7 +603,7 @@
                 btn.disabled = false;
                 btn.innerText = '提交評分';
                 if(res.status === 'success') {
-                    alert('評分與相片記錄成功！');
+                    alert('高清原圖已成功存入 Google Drive！');
                     document.getElementById('rating-modal').classList.add('hidden');
                     loadData();
                 } else {
@@ -663,7 +647,7 @@
                     <div>📞 <b>聯絡電話：</b>${pick.phone || '無'}</div>
                 </div>
             `;
-            document.getElementById('lottery-modal').classList.remove('hidden');
+            document.getElementById('lottery-modal').classList.add('hidden');
         }
 
         function initAmap() {
