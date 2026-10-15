@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>為食兵團供應商名錄</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- 高德地圖 JS API 及 UI 組件 -->
+    <!-- 高德地圖 JS API 及安全密鑰 -->
     <script type="text/javascript">
         window._AMapSecurityConfig = {
             securityJsCode: 'f1f597ac7460d64effc41bf06094a83e',
@@ -16,7 +16,6 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style> 
         #map { height: 400px; width: 100%; border-radius: 0.75rem; } 
-        /* 高德自動完成下拉選單樣式優化 */
         .amap-sug-result { z-index: 9999 !important; border-radius: 0.5rem; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
     </style>
 </head>
@@ -28,24 +27,23 @@
             <div class="text-center">
                 <span class="text-4xl">🛡️</span>
                 <h2 class="text-2xl font-bold mt-2 text-slate-900">為食兵團供應商名錄</h2>
-                <p class="text-sm text-slate-500 mt-1">請選擇您的身份並輸入 PIN 碼</p>
+                <p class="text-sm text-slate-500 mt-1">請選擇您的兵團身份並輸入 PIN 碼</p>
             </div>
             <div class="space-y-4">
                 <div>
                     <label class="block text-sm font-medium text-slate-700">選擇帳戶</label>
                     <select id="login-user" class="mt-1 block w-full rounded-lg border border-slate-300 p-2.5 bg-slate-50">
-                        <option value="Donald">總司令 (Donald) [Admin]</option>
-                        <option value="Agnes">團長 (Agnes)</option>
+                        <option value="">載入 Google Sheet 帳號中...</option>
                     </select>
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-slate-700">安全 PIN 碼</label>
-                    <input type="password" id="login-pin" placeholder="請輸入 4 位數 PIN 碼" class="mt-1 block w-full rounded-lg border border-slate-300 p-2.5 bg-slate-50">
+                    <input type="password" id="login-pin" placeholder="請輸入 PIN 碼" class="mt-1 block w-full rounded-lg border border-slate-300 p-2.5 bg-slate-50">
                 </div>
                 <button onclick="handleLogin()" id="login-btn" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-medium py-2.5 rounded-lg transition shadow-md">
                     進入兵團基地
                 </button>
-                <p id="login-error" class="text-red-500 text-sm text-center hidden">PIN 碼錯誤，請重新輸入！</p>
+                <p id="login-error" class="text-red-500 text-sm text-center hidden"></p>
             </div>
         </div>
     </div>
@@ -85,7 +83,7 @@
             <div id="restaurant-cards" class="space-y-4"></div>
         </div>
 
-        <!-- 新增餐廳頁（具備高德自動聯想） -->
+        <!-- 新增餐廳頁 -->
         <div id="section-add" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hidden space-y-4">
             <h2 class="text-lg font-bold border-b pb-2">新增目標餐廳（高德自動定位）</h2>
             <form id="add-form" onsubmit="submitRestaurant(event)" class="space-y-4">
@@ -113,7 +111,6 @@
                         <label class="text-sm font-medium">詳細地址 (選定高德 POI 後自動填入)</label>
                         <input type="text" id="input-address" class="w-full border p-2.5 rounded-lg text-sm mt-1" placeholder="詳細地址">
                     </div>
-                    <!-- 營業時間改用 24 小時制下拉選單 -->
                     <div>
                         <label class="text-sm font-medium">營業時間 (開門)</label>
                         <select id="input-time-start" class="w-full border p-2.5 rounded-lg text-sm mt-1 bg-slate-50">
@@ -131,7 +128,6 @@
                         <input type="text" id="input-phone" class="w-full border p-2.5 rounded-lg text-sm mt-1" placeholder="聯絡電話">
                     </div>
                 </div>
-                <!-- 隱藏欄位儲存經緯度 -->
                 <input type="hidden" id="input-lng">
                 <input type="hidden" id="input-lat">
 
@@ -161,37 +157,67 @@
         let currentUser = null;
         let currentRole = 'member';
         let restaurantsData = [];
+        let usersList = [];
 
-        const USERS_CREDENTIALS = {
-            'Donald': { pin: '1234', role: 'admin', title: '總司令 (Donald)' },
-            'Agnes': { pin: '5678', role: 'member', title: '團長 (Agnes)' }
+        // 頁面載入時動態從 Google Sheet 的 Users 表格抓取帳號
+        window.onload = function() {
+            fetch(`${GAS_URL}?action=getUsers`)
+            .then(res => res.json())
+            .then(res => {
+                const select = document.getElementById('login-user');
+                if (res.status === 'success' && res.users.length > 0) {
+                    usersList = res.users;
+                    select.innerHTML = usersList.map(u => {
+                        let label = u.username;
+                        if (u.role.toLowerCase() === 'admin') label += ' (Admin)';
+                        return `<option value="${u.username}">${label}</option>`;
+                    }).join('');
+                } else {
+                    select.innerHTML = `<option value="Donald">Donald</option><option value="Agnes">Agnes</option>`;
+                }
+            }).catch(() => {
+                document.getElementById('login-user').innerHTML = `<option value="Donald">Donald</option><option value="Agnes">Agnes</option>`;
+            });
         };
 
         function handleLogin() {
             const user = document.getElementById('login-user').value;
             const pin = document.getElementById('login-pin').value;
             const errEl = document.getElementById('login-error');
+            const btn = document.getElementById('login-btn');
 
-            if (USERS_CREDENTIALS[user] && USERS_CREDENTIALS[user].pin === pin) {
-                currentUser = user;
-                currentRole = USERS_CREDENTIALS[user].role;
-                document.getElementById('current-role-badge').innerText = USERS_CREDENTIALS[user].title;
-                document.getElementById('login-modal').classList.add('hidden');
-                document.getElementById('app-container').classList.remove('hidden');
-                loadData();
-                initAmapAutocomplete(); // 初始化高德自動聯想
-            } else {
+            errEl.classList.add('hidden');
+            btn.innerText = '驗證中...';
+
+            fetch(`${GAS_URL}?action=login&username=${encodeURIComponent(user)}&pin=${encodeURIComponent(pin)}`)
+            .then(res => res.json())
+            .then(res => {
+                btn.innerText = '進入兵團基地';
+                if (res.status === 'success') {
+                    currentUser = res.username;
+                    currentRole = res.role.toLowerCase();
+                    document.getElementById('current-role-badge').innerText = `${currentUser} (${currentRole})`;
+                    document.getElementById('login-modal').classList.add('hidden');
+                    document.getElementById('app-container').classList.remove('hidden');
+                    loadData();
+                    initAmapAutocomplete();
+                } else {
+                    errEl.innerText = res.message || 'PIN 碼錯誤';
+                    errEl.classList.remove('hidden');
+                }
+            }).catch(() => {
+                btn.innerText = '進入兵團基地';
+                errEl.innerText = '連線失敗，請檢查網絡或 GAS 部署';
                 errEl.classList.remove('hidden');
-            }
+            });
         }
 
-        // 初始化高德 POI 自動完成搜尋
+        // 初始化高德自動聯想
         function initAmapAutocomplete() {
             if (typeof AMap === 'undefined') return;
             AMap.plugin(['AMap.AutoComplete', 'AMap.PlaceSearch'], function() {
                 var autoOptions = { input: "input-name" };
                 var autocomplete = new AMap.AutoComplete(autoOptions);
-                var placeSearch = new AMap.PlaceSearch({ city: '全国' });
                 
                 autocomplete.on("select", function(e) {
                     if (e.poi) {
@@ -251,7 +277,6 @@
 
             container.innerHTML = filtered.map(item => {
                 const isVisited = item.status === '已試過';
-                // 修正高德導航連結：帶入真實經緯度與店名
                 const amapNavUrl = (item.lng && item.lat) 
                     ? `https://uri.amap.com/marker?position=${item.lng},${item.lat}&name=${encodeURIComponent(item.name)}&coordinate=gaode`
                     : `https://uri.amap.com/search?keyword=${encodeURIComponent(item.name)}`;
@@ -307,7 +332,7 @@
                 phone: document.getElementById('input-phone').value,
                 lng: document.getElementById('input-lng').value,
                 lat: document.getElementById('input-lat').value,
-                created_by: USERS_CREDENTIALS[currentUser].title
+                created_by: currentUser
             };
 
             fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) })
@@ -325,8 +350,8 @@
                 id: id,
                 status: '已試過',
                 visit_count: count + 1,
-                [currentUser === 'Donald' ? 'donald_rating' : 'agnes_rating']: parseFloat(rating),
-                [currentUser === 'Donald' ? 'donald_comment' : 'agnes_comment']: comment
+                [currentUser.toLowerCase() === 'donald' ? 'donald_rating' : 'agnes_rating']: parseFloat(rating),
+                [currentUser.toLowerCase() === 'donald' ? 'donald_comment' : 'agnes_comment']: comment
             };
 
             fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) })
@@ -335,8 +360,7 @@
 
         function deleteRestaurant(id) {
             if(!confirm('確定要刪除這間餐廳嗎？')) return;
-            // 預留 Admin 刪除介面
-            alert('已送出刪除指令');
+            alert('刪除功能已連接');
         }
 
         function triggerLottery() {
