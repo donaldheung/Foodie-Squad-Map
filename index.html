@@ -541,13 +541,10 @@
         function handleRatingPhotos(input) {
             if (input.files && input.files.length > 0) {
                 Array.from(input.files).forEach(file => {
-                    // 保留高清原圖，僅轉化為 Base64 傳送到 GAS 由 Drive 儲存
-                    const reader = new FileReader();
-                    reader.onload = e => {
-                        ratingPhotosBase64.push(e.target.result);
+                    compressFile(file, base64 => {
+                        ratingPhotosBase64.push(base64);
                         renderRatingPhotoPreview();
-                    };
-                    reader.readAsDataURL(file);
+                    });
                 });
                 input.value = '';
             }
@@ -570,19 +567,42 @@
 
         function encodeCommentImage(id, input) {
             if (input.files && input.files[0]) {
-                const reader = new FileReader();
-                reader.onload = e => {
-                    commentPhotoBase64[id] = e.target.result;
-                };
-                reader.readAsDataURL(input.files[0]);
+                compressFile(input.files[0], base64 => { commentPhotoBase64[id] = base64; });
             }
+        }
+
+        // 💡 高清適度壓縮：寬度 1200px，畫質 0.8，確保順利上傳至 Google Drive 且放大依然清晰
+        function compressFile(file, callback) {
+            const reader = new FileReader();
+            reader.onload = e => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const MAX = 1200;
+                    let width = img.width;
+                    let height = img.height;
+                    
+                    if (width > MAX) {
+                        height = Math.round(height * (MAX / width));
+                        width = MAX;
+                    }
+                    
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    callback(canvas.toDataURL('image/jpeg', 0.8));
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
         }
 
         function submitRating() {
             const btn = document.getElementById('rating-submit-btn');
             if (btn.disabled) return;
             btn.disabled = true;
-            btn.innerText = '上傳高清原圖至 Drive 中...';
+            btn.innerText = '上傳高清相片中...';
 
             const item = restaurantsData.find(i => i.id === currentRatingRestId);
             const score = parseFloat(document.getElementById('rating-score').value);
@@ -603,7 +623,7 @@
                 btn.disabled = false;
                 btn.innerText = '提交評分';
                 if(res.status === 'success') {
-                    alert('高清原圖已成功存入 Google Drive！');
+                    alert('評分與高清相片已成功上傳至 Google Drive！');
                     document.getElementById('rating-modal').classList.add('hidden');
                     loadData();
                 } else {
