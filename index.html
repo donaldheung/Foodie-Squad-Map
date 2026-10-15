@@ -221,7 +221,7 @@
         let restaurantsData = [];
         let currentRatingRestId = null;
         let ratingPhotosBase64 = [];
-        let commentPhotoBase64 = {}; // 儲存各餐廳交流區選中的相片 Base64
+        let commentPhotoBase64 = {};
 
         const simToTradMap = {
             '广':'廣','东':'東','区':'區','湾':'灣','门':'門','饭':'飯','店':'店','记':'記','饺':'餃','面':'麵','鲜':'鮮','鱼':'魚','肉':'肉','鸡':'雞',
@@ -237,6 +237,21 @@
                 res = res.replace(new RegExp(sim, 'g'), simToTradMap[sim]);
             }
             return res;
+        }
+
+        // 通用 FormUrlEncoded 發送請求（徹底避免 CORS 阻擋問題）
+        function postForm(payloadObj) {
+            const body = new URLSearchParams();
+            for (let k in payloadObj) {
+                let val = payloadObj[k];
+                if (typeof val === 'object') val = JSON.stringify(val);
+                body.append(k, val);
+            }
+            return fetch(GAS_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: body.toString()
+            }).then(r => r.json());
         }
 
         window.onload = function() {
@@ -412,7 +427,6 @@
                                     <input type="text" id="comment-input-${item.id}" placeholder="寫下您的心得..." class="flex-1 border rounded px-2 py-1 bg-white">
                                     <button onclick="postComment('${item.id}')" class="bg-slate-800 text-white px-3 py-1 rounded">發布</button>
                                 </div>
-                                <!-- 交流區相片預覽與取消 -->
                                 <div id="comment-photo-container-${item.id}">
                                     <div class="flex items-center gap-2 text-[10px] text-slate-500" id="comment-file-row-${item.id}">
                                         <span>附加相片:</span>
@@ -508,8 +522,7 @@
                 created_by: currentUser
             };
 
-            fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) })
-            .then(() => {
+            postForm(payload).then(() => {
                 alert('成功加入兵團名錄！');
                 document.getElementById('add-form').reset();
                 toggleHoursInput({ checked: false });
@@ -569,7 +582,6 @@
             renderRatingPhotoPreview();
         }
 
-        // 交流區相片選擇與取消
         function encodeCommentImage(id, input) {
             if (input.files && input.files[0]) {
                 compressFile(input.files[0], base64 => {
@@ -607,7 +619,7 @@
                 const img = new Image();
                 img.onload = () => {
                     const canvas = document.createElement('canvas');
-                    const MAX = 1000;
+                    const MAX = 800;
                     let width = img.width;
                     let height = img.height;
                     
@@ -620,14 +632,13 @@
                     canvas.height = height;
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, width, height);
-                    callback(canvas.toDataURL('image/jpeg', 0.8));
+                    callback(canvas.toDataURL('image/jpeg', 0.7));
                 };
                 img.src = e.target.result;
             };
             reader.readAsDataURL(file);
         }
 
-        // 💡 關鍵優化：分批逐張上傳相片，確保 100% 成功存入 Google Drive
         function submitRating() {
             const btn = document.getElementById('rating-submit-btn');
             if (btn.disabled) return;
@@ -638,7 +649,6 @@
             const score = parseFloat(document.getElementById('rating-score').value);
             const comment = document.getElementById('rating-comment').value;
 
-            // 1. 先送出文字評分
             const payload = {
                 action: 'updateRestaurant',
                 id: currentRatingRestId,
@@ -647,17 +657,12 @@
                 new_rating: { user: currentUser, rating: score, comment: comment, time: new Date().toLocaleString() }
             };
 
-            fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) })
-            .then(res => res.json())
-            .then(res => {
+            postForm(payload).then(res => {
                 if(res.status === 'success') {
-                    // 2. 如果有選相片，逐張獨立上傳到 Google Drive
                     if (ratingPhotosBase64.length > 0) {
+                        btn.innerText = '上傳相片至 Drive 中...';
                         let photoPromises = ratingPhotosBase64.map(photoBase64 => {
-                            return fetch(GAS_URL, {
-                                method: 'POST',
-                                body: JSON.stringify({ action: 'uploadPhoto', id: currentRatingRestId, photo: photoBase64 })
-                            }).then(r => r.json());
+                            return postForm({ action: 'uploadPhoto', id: currentRatingRestId, photo: photoBase64 });
                         });
 
                         return Promise.all(photoPromises).then(() => {
@@ -671,10 +676,10 @@
                     btn.disabled = false;
                     btn.innerText = '提交評分';
                 }
-            }).catch(() => {
+            }).catch(err => {
                 btn.disabled = false;
                 btn.innerText = '提交評分';
-                alert('網絡連線失敗');
+                alert('網路連線失敗或請求被阻擋');
             });
         }
 
@@ -682,7 +687,7 @@
             const btn = document.getElementById('rating-submit-btn');
             btn.disabled = false;
             btn.innerText = '提交評分';
-            alert('評分與高清相片已成功上傳至 Google Drive！');
+            alert('評分與相片已成功上傳至 Google Drive！');
             document.getElementById('rating-modal').classList.add('hidden');
             loadData();
         }
@@ -692,9 +697,7 @@
             if(!text && !commentPhotoBase64[id]) return;
 
             const payload = { action: 'addComment', id: id, user: currentUser, text: text || '上傳相片', photo: commentPhotoBase64[id] || '' };
-            fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) })
-            .then(res => res.json())
-            .then(res => {
+            postForm(payload).then(res => {
                 if(res.status === 'success') {
                     document.getElementById(`comment-input-${id}`).value = '';
                     removeCommentPhoto(id);
@@ -707,8 +710,7 @@
 
         function deleteRestaurant(id) {
             if(!confirm('確定要永久刪除這間餐廳嗎？')) return;
-            fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteRestaurant', id: id }) })
-            .then(() => { alert('已成功刪除'); loadData(); });
+            postForm({ action: 'deleteRestaurant', id: id }).then(() => { alert('已成功刪除'); loadData(); });
         }
 
         function triggerLottery() {
