@@ -172,7 +172,7 @@
                     <textarea id="rating-comment" class="w-full border p-2 rounded text-sm mt-1" placeholder="寫下食後感..."></textarea>
                 </div>
                 <div>
-                    <label class="text-xs font-medium">上傳當次相片 (高清原圖，可多選)</label>
+                    <label class="text-xs font-medium">上傳當次相片 (可多選)</label>
                     <input type="file" id="rating-file-input" accept="image/*" multiple class="w-full border p-1.5 rounded text-xs mt-1 bg-slate-50" onchange="handleRatingPhotos(this)">
                     <div id="rating-photo-preview" class="grid grid-cols-4 gap-2 mt-2"></div>
                 </div>
@@ -221,7 +221,7 @@
         let restaurantsData = [];
         let currentRatingRestId = null;
         let ratingPhotosBase64 = [];
-        let commentPhotoBase64 = {};
+        let commentPhotosMap = {}; // 支持交流區多圖上傳 { restId: [base64_1, base64_2] }
 
         const simToTradMap = {
             '广':'廣','东':'東','区':'區','湾':'灣','门':'門','饭':'飯','店':'店','记':'記','饺':'餃','面':'麵','鲜':'鮮','鱼':'魚','肉':'肉','鸡':'雞',
@@ -239,7 +239,7 @@
             return res;
         }
 
-        // 通用 FormUrlEncoded 發送請求（徹底避免 CORS 阻擋問題）
+        // 發送 FormUrlEncoded 資料
         function postForm(payloadObj) {
             const body = new URLSearchParams();
             for (let k in payloadObj) {
@@ -410,6 +410,7 @@
                             </div>
                         </div>
 
+                        <!-- 交流區 -->
                         <div class="bg-slate-50 p-3 rounded-xl space-y-2 text-xs">
                             <div class="font-bold text-slate-700">💬 兵團成員交流區</div>
                             <div class="space-y-1 max-h-40 overflow-y-auto">
@@ -425,13 +426,14 @@
                             <div class="space-y-2 pt-1">
                                 <div class="flex gap-2">
                                     <input type="text" id="comment-input-${item.id}" placeholder="寫下您的心得..." class="flex-1 border rounded px-2 py-1 bg-white">
-                                    <button onclick="postComment('${item.id}')" class="bg-slate-800 text-white px-3 py-1 rounded">發布</button>
+                                    <button id="comment-btn-${item.id}" onclick="postComment('${item.id}')" class="bg-slate-800 text-white px-3 py-1 rounded">發布</button>
                                 </div>
-                                <div id="comment-photo-container-${item.id}">
-                                    <div class="flex items-center gap-2 text-[10px] text-slate-500" id="comment-file-row-${item.id}">
+                                <div>
+                                    <div class="flex items-center gap-2 text-[10px] text-slate-500">
                                         <span>附加相片:</span>
-                                        <input type="file" accept="image/*" class="text-[10px]" onchange="encodeCommentImage('${item.id}', this)">
+                                        <input type="file" accept="image/*" multiple class="text-[10px]" onchange="handleCommentPhotos('${item.id}', this)">
                                     </div>
+                                    <div id="comment-preview-${item.id}" class="grid grid-cols-4 gap-1 mt-1"></div>
                                 </div>
                             </div>
                         </div>
@@ -582,37 +584,39 @@
             renderRatingPhotoPreview();
         }
 
-        function encodeCommentImage(id, input) {
-            if (input.files && input.files[0]) {
-                compressFile(input.files[0], base64 => {
-                    commentPhotoBase64[id] = base64;
-                    renderCommentPhotoPreview(id);
+        // 交流區多相片選取與預覽
+        function handleCommentPhotos(id, input) {
+            if (input.files && input.files.length > 0) {
+                if (!commentPhotosMap[id]) commentPhotosMap[id] = [];
+                Array.from(input.files).forEach(file => {
+                    compressFile(file, base64 => {
+                        commentPhotosMap[id].push(base64);
+                        renderCommentPhotoPreview(id);
+                    });
                 });
+                input.value = '';
             }
         }
 
         function renderCommentPhotoPreview(id) {
-            const row = document.getElementById(`comment-file-row-${id}`);
-            if(!row) return;
-            row.innerHTML = `
+            const preview = document.getElementById(`comment-preview-${id}`);
+            if(!preview || !commentPhotosMap[id]) return;
+            preview.innerHTML = commentPhotosMap[id].map((img, idx) => `
                 <div class="relative inline-block">
-                    <img src="${commentPhotoBase64[id]}" onclick="openImageModal('${commentPhotoBase64[id]}')" class="w-12 h-12 object-cover rounded border cursor-pointer">
-                    <button onclick="removeCommentPhoto('${id}')" class="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold shadow">✕</button>
+                    <img src="${img}" onclick="openImageModal('${img}')" class="w-12 h-12 object-cover rounded border cursor-pointer">
+                    <button onclick="removeCommentPhoto('${id}', ${idx})" class="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold shadow">✕</button>
                 </div>
-            `;
+            `).join('');
         }
 
-        function removeCommentPhoto(id) {
-            commentPhotoBase64[id] = '';
-            const container = document.getElementById(`comment-photo-container-${id}`);
-            container.innerHTML = `
-                <div class="flex items-center gap-2 text-[10px] text-slate-500" id="comment-file-row-${id}">
-                    <span>附加相片:</span>
-                    <input type="file" accept="image/*" class="text-[10px]" onchange="encodeCommentImage('${id}', this)">
-                </div>
-            `;
+        function removeCommentPhoto(id, idx) {
+            if (commentPhotosMap[id]) {
+                commentPhotosMap[id].splice(idx, 1);
+                renderCommentPhotoPreview(id);
+            }
         }
 
+        // 💡 關鍵：壓縮至 800px 寬高以內、品質 0.65，避免被網路與 GAS 阻擋
         function compressFile(file, callback) {
             const reader = new FileReader();
             reader.onload = e => {
@@ -623,23 +627,28 @@
                     let width = img.width;
                     let height = img.height;
                     
-                    if (width > MAX) {
-                        height = Math.round(height * (MAX / width));
-                        width = MAX;
+                    if (width > MAX || height > MAX) {
+                        if (width > height) {
+                            height = Math.round(height * (MAX / width));
+                            width = MAX;
+                        } else {
+                            width = Math.round(width * (MAX / height));
+                            height = MAX;
+                        }
                     }
                     
                     canvas.width = width;
                     canvas.height = height;
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, width, height);
-                    callback(canvas.toDataURL('image/jpeg', 0.7));
+                    callback(canvas.toDataURL('image/jpeg', 0.65));
                 };
                 img.src = e.target.result;
             };
             reader.readAsDataURL(file);
         }
 
-        function submitRating() {
+        async function submitRating() {
             const btn = document.getElementById('rating-submit-btn');
             if (btn.disabled) return;
             btn.disabled = true;
@@ -649,38 +658,35 @@
             const score = parseFloat(document.getElementById('rating-score').value);
             const comment = document.getElementById('rating-comment').value;
 
-            const payload = {
-                action: 'updateRestaurant',
-                id: currentRatingRestId,
-                status: '已試過',
-                visit_count: (item ? item.visit_count || 0 : 0) + 1,
-                new_rating: { user: currentUser, rating: score, comment: comment, time: new Date().toLocaleString() }
-            };
+            try {
+                // 1. 送出評分文字
+                const res = await postForm({
+                    action: 'updateRestaurant',
+                    id: currentRatingRestId,
+                    status: '已試過',
+                    visit_count: (item ? item.visit_count || 0 : 0) + 1,
+                    new_rating: { user: currentUser, rating: score, comment: comment, time: new Date().toLocaleString() }
+                });
 
-            postForm(payload).then(res => {
                 if(res.status === 'success') {
+                    // 2. 如果有照片，一張一張依序獨立上傳
                     if (ratingPhotosBase64.length > 0) {
-                        btn.innerText = '上傳相片至 Drive 中...';
-                        let photoPromises = ratingPhotosBase64.map(photoBase64 => {
-                            return postForm({ action: 'uploadPhoto', id: currentRatingRestId, photo: photoBase64 });
-                        });
-
-                        return Promise.all(photoPromises).then(() => {
-                            finishRatingSuccess();
-                        });
-                    } else {
-                        finishRatingSuccess();
+                        for (let i = 0; i < ratingPhotosBase64.length; i++) {
+                            btn.innerText = `上傳相片 (${i + 1}/${ratingPhotosBase64.length})...`;
+                            await postForm({ action: 'uploadPhoto', id: currentRatingRestId, photo: ratingPhotosBase64[i] });
+                        }
                     }
+                    finishRatingSuccess();
                 } else {
                     alert('提交失敗：' + res.message);
                     btn.disabled = false;
                     btn.innerText = '提交評分';
                 }
-            }).catch(err => {
+            } catch (err) {
                 btn.disabled = false;
                 btn.innerText = '提交評分';
-                alert('網路連線失敗或請求被阻擋');
-            });
+                alert('上傳失敗，請重試！');
+            }
         }
 
         function finishRatingSuccess() {
@@ -692,20 +698,41 @@
             loadData();
         }
 
-        function postComment(id) {
-            const text = document.getElementById(`comment-input-${id}`).value.trim();
-            if(!text && !commentPhotoBase64[id]) return;
+        async function postComment(id) {
+            const textInput = document.getElementById(`comment-input-${id}`);
+            const btn = document.getElementById(`comment-btn-${id}`);
+            const text = textInput.value.trim();
+            const photos = commentPhotosMap[id] || [];
 
-            const payload = { action: 'addComment', id: id, user: currentUser, text: text || '上傳相片', photo: commentPhotoBase64[id] || '' };
-            postForm(payload).then(res => {
-                if(res.status === 'success') {
-                    document.getElementById(`comment-input-${id}`).value = '';
-                    removeCommentPhoto(id);
-                    loadData();
-                } else {
-                    alert('發布失敗：' + res.message);
+            if(!text && photos.length === 0) return;
+
+            btn.disabled = true;
+            btn.innerText = '發布中...';
+
+            try {
+                // 發布第一個留言文字與首張相片
+                let firstPhoto = photos.length > 0 ? photos[0] : '';
+                const payload = { action: 'addComment', id: id, user: currentUser, text: text || '上傳相片', photo: firstPhoto };
+                await postForm(payload);
+
+                // 如果交流區有多於 1 張相片，將其餘相片逐張作為附圖留言發布
+                if (photos.length > 1) {
+                    for (let i = 1; i < photos.length; i++) {
+                        await postForm({ action: 'addComment', id: id, user: currentUser, text: '附圖', photo: photos[i] });
+                    }
                 }
-            });
+
+                textInput.value = '';
+                commentPhotosMap[id] = [];
+                renderCommentPhotoPreview(id);
+                btn.disabled = false;
+                btn.innerText = '發布';
+                loadData();
+            } catch(e) {
+                btn.disabled = false;
+                btn.innerText = '發布';
+                alert('發布失敗，請重試！');
+            }
         }
 
         function deleteRestaurant(id) {
