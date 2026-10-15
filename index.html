@@ -12,6 +12,9 @@
     <style> 
         #map { height: 450px; width: 100%; border-radius: 0.75rem; } 
         .amap-sug-result { z-index: 9999 !important; border-radius: 0.5rem; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+        .star-item { display: inline-block; position: relative; cursor: pointer; font-size: 2rem; user-select: none; }
+        .star-item .half-left { position: absolute; left: 0; width: 50%; height: 100%; z-index: 2; }
+        .star-item .half-right { position: absolute; right: 0; width: 50%; height: 100%; z-index: 2; }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans">
@@ -153,14 +156,34 @@
             <h3 class="text-lg font-bold border-b pb-2">新增評分與記錄</h3>
             <div class="space-y-3">
                 <div>
-                    <label class="text-xs font-medium">評分星級</label>
-                    <div class="flex items-center gap-1 mt-1 text-2xl" id="star-container">
-                        <span onclick="setRating(1)" class="cursor-pointer text-amber-400">⭐</span>
-                        <span onclick="setRating(2)" class="cursor-pointer text-amber-400">⭐</span>
-                        <span onclick="setRating(3)" class="cursor-pointer text-amber-400">⭐</span>
-                        <span onclick="setRating(4)" class="cursor-pointer text-amber-400">⭐</span>
-                        <span onclick="setRating(5)" class="cursor-pointer text-amber-400">⭐</span>
-                        <span id="rating-text" class="text-sm font-bold ml-2 text-amber-600">5.0 / 5星</span>
+                    <label class="text-xs font-medium">評分星級 (點擊左/右半邊選半星或滿星)</label>
+                    <div class="flex items-center gap-1 mt-1" id="star-container">
+                        <div class="star-item" id="star-1">
+                            <div class="half-left" onclick="setRating(0.5)"></div>
+                            <div class="half-right" onclick="setRating(1.0)"></div>
+                            <span class="star-icon">⭐</span>
+                        </div>
+                        <div class="star-item" id="star-2">
+                            <div class="half-left" onclick="setRating(1.5)"></div>
+                            <div class="half-right" onclick="setRating(2.0)"></div>
+                            <span class="star-icon">⭐</span>
+                        </div>
+                        <div class="star-item" id="star-3">
+                            <div class="half-left" onclick="setRating(2.5)"></div>
+                            <div class="half-right" onclick="setRating(3.0)"></div>
+                            <span class="star-icon">⭐</span>
+                        </div>
+                        <div class="star-item" id="star-4">
+                            <div class="half-left" onclick="setRating(3.5)"></div>
+                            <div class="half-right" onclick="setRating(4.0)"></div>
+                            <span class="star-icon">⭐</span>
+                        </div>
+                        <div class="star-item" id="star-5">
+                            <div class="half-left" onclick="setRating(4.5)"></div>
+                            <div class="half-right" onclick="setRating(5.0)"></div>
+                            <span class="star-icon">⭐</span>
+                        </div>
+                        <span id="rating-text" class="text-base font-bold ml-2 text-amber-600">5.0 星</span>
                     </div>
                     <input type="hidden" id="rating-score" value="5">
                 </div>
@@ -503,7 +526,7 @@
         function openRatingModal(id) {
             currentRatingRestId = id;
             ratingPhotosBase64 = [];
-            setRating(5);
+            setRating(5.0);
             document.getElementById('rating-comment').value = '';
             document.getElementById('rating-photo-preview').innerHTML = '';
             document.getElementById('rating-modal').classList.remove('hidden');
@@ -511,11 +534,11 @@
 
         function setRating(val) {
             document.getElementById('rating-score').value = val;
-            document.getElementById('rating-text').innerText = `${val.toFixed(1)} / 5星`;
-            const stars = document.querySelectorAll('#star-container span:not(#rating-text)');
-            stars.forEach((star, idx) => {
-                star.style.opacity = idx < val ? '1' : '0.3';
-            });
+            document.getElementById('rating-text').innerText = `${val.toFixed(1)} 星`;
+            for (let i = 1; i <= 5; i++) {
+                const starEl = document.querySelector(`#star-${i} .star-icon`);
+                starEl.style.opacity = val >= i ? '1' : '0.2';
+            }
         }
 
         function handleRatingPhotos(input) {
@@ -551,19 +574,20 @@
             }
         }
 
+        // 💡 強化壓縮：限制寬度最大 300px，質量壓到 0.4，確保體積極細，秒傳雲端不超限！
         function compressFile(file, callback) {
             const reader = new FileReader();
             reader.onload = e => {
                 const img = new Image();
                 img.onload = () => {
                     const canvas = document.createElement('canvas');
-                    const MAX = 400; // 限制最大寬度以防超過 GAS 封包大小
+                    const MAX = 300; 
                     const scale = MAX / img.width;
                     canvas.width = MAX;
                     canvas.height = img.height * scale;
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                    callback(canvas.toDataURL('image/jpeg', 0.5));
+                    callback(canvas.toDataURL('image/jpeg', 0.4));
                 };
                 img.src = e.target.result;
             };
@@ -580,7 +604,6 @@
             const score = parseFloat(document.getElementById('rating-score').value);
             const comment = document.getElementById('rating-comment').value;
 
-            // 一次過將評分與所有相片打包發送
             const payload = {
                 action: 'updateRestaurant',
                 id: currentRatingRestId,
@@ -640,7 +663,7 @@
                     <div>📞 <b>聯絡電話：</b>${pick.phone || '無'}</div>
                 </div>
             `;
-            document.getElementById('lottery-modal').classList.add('hidden');
+            document.getElementById('lottery-modal').classList.remove('hidden');
         }
 
         function initAmap() {
