@@ -173,7 +173,7 @@
                 </div>
                 <div>
                     <label class="text-xs font-medium">上傳當次相片 (高清原圖，可多選)</label>
-                    <input type="file" accept="image/*" multiple class="w-full border p-1.5 rounded text-xs mt-1 bg-slate-50" onchange="handleRatingPhotos(this)">
+                    <input type="file" id="rating-file-input" accept="image/*" multiple class="w-full border p-1.5 rounded text-xs mt-1 bg-slate-50" onchange="handleRatingPhotos(this)">
                     <div id="rating-photo-preview" class="grid grid-cols-4 gap-2 mt-2"></div>
                 </div>
                 <div class="flex gap-2 pt-2">
@@ -221,7 +221,7 @@
         let restaurantsData = [];
         let currentRatingRestId = null;
         let ratingPhotosBase64 = [];
-        let commentPhotoBase64 = {};
+        let commentPhotoBase64 = {}; // 儲存各餐廳交流區選中的相片 Base64
 
         const simToTradMap = {
             '广':'廣','东':'東','区':'區','湾':'灣','门':'門','饭':'飯','店':'店','记':'記','饺':'餃','面':'麵','鲜':'鮮','鱼':'魚','肉':'肉','鸡':'雞',
@@ -407,14 +407,17 @@
                                     `).join('')
                                 }
                             </div>
-                            <div class="space-y-1 pt-1">
+                            <div class="space-y-2 pt-1">
                                 <div class="flex gap-2">
                                     <input type="text" id="comment-input-${item.id}" placeholder="寫下您的心得..." class="flex-1 border rounded px-2 py-1 bg-white">
                                     <button onclick="postComment('${item.id}')" class="bg-slate-800 text-white px-3 py-1 rounded">發布</button>
                                 </div>
-                                <div class="flex items-center gap-2 text-[10px] text-slate-500">
-                                    <span>附加相片:</span>
-                                    <input type="file" accept="image/*" class="text-[10px]" onchange="encodeCommentImage('${item.id}', this)">
+                                <!-- 交流區相片預覽與取消 -->
+                                <div id="comment-photo-container-${item.id}">
+                                    <div class="flex items-center gap-2 text-[10px] text-slate-500" id="comment-file-row-${item.id}">
+                                        <span>附加相片:</span>
+                                        <input type="file" accept="image/*" class="text-[10px]" onchange="encodeCommentImage('${item.id}', this)">
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -526,6 +529,7 @@
             setRating(5.0);
             document.getElementById('rating-comment').value = '';
             document.getElementById('rating-photo-preview').innerHTML = '';
+            document.getElementById('rating-file-input').value = '';
             document.getElementById('rating-modal').classList.remove('hidden');
         }
 
@@ -565,20 +569,45 @@
             renderRatingPhotoPreview();
         }
 
+        // 交流區相片選擇與取消
         function encodeCommentImage(id, input) {
             if (input.files && input.files[0]) {
-                compressFile(input.files[0], base64 => { commentPhotoBase64[id] = base64; });
+                compressFile(input.files[0], base64 => {
+                    commentPhotoBase64[id] = base64;
+                    renderCommentPhotoPreview(id);
+                });
             }
         }
 
-        // 💡 高清適度壓縮：寬度 1200px，畫質 0.8，確保順利上傳至 Google Drive 且放大依然清晰
+        function renderCommentPhotoPreview(id) {
+            const row = document.getElementById(`comment-file-row-${id}`);
+            if(!row) return;
+            row.innerHTML = `
+                <div class="relative inline-block">
+                    <img src="${commentPhotoBase64[id]}" onclick="openImageModal('${commentPhotoBase64[id]}')" class="w-12 h-12 object-cover rounded border cursor-pointer">
+                    <button onclick="removeCommentPhoto('${id}')" class="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold shadow">✕</button>
+                </div>
+            `;
+        }
+
+        function removeCommentPhoto(id) {
+            commentPhotoBase64[id] = '';
+            const container = document.getElementById(`comment-photo-container-${id}`);
+            container.innerHTML = `
+                <div class="flex items-center gap-2 text-[10px] text-slate-500" id="comment-file-row-${id}">
+                    <span>附加相片:</span>
+                    <input type="file" accept="image/*" class="text-[10px]" onchange="encodeCommentImage('${id}', this)">
+                </div>
+            `;
+        }
+
         function compressFile(file, callback) {
             const reader = new FileReader();
             reader.onload = e => {
                 const img = new Image();
                 img.onload = () => {
                     const canvas = document.createElement('canvas');
-                    const MAX = 1200;
+                    const MAX = 1000;
                     let width = img.width;
                     let height = img.height;
                     
@@ -598,36 +627,49 @@
             reader.readAsDataURL(file);
         }
 
+        // 💡 關鍵優化：分批逐張上傳相片，確保 100% 成功存入 Google Drive
         function submitRating() {
             const btn = document.getElementById('rating-submit-btn');
             if (btn.disabled) return;
             btn.disabled = true;
-            btn.innerText = '上傳高清相片中...';
+            btn.innerText = '儲存評分中...';
 
             const item = restaurantsData.find(i => i.id === currentRatingRestId);
             const score = parseFloat(document.getElementById('rating-score').value);
             const comment = document.getElementById('rating-comment').value;
 
+            // 1. 先送出文字評分
             const payload = {
                 action: 'updateRestaurant',
                 id: currentRatingRestId,
                 status: '已試過',
                 visit_count: (item ? item.visit_count || 0 : 0) + 1,
-                new_rating: { user: currentUser, rating: score, comment: comment, time: new Date().toLocaleString() },
-                new_photos: ratingPhotosBase64
+                new_rating: { user: currentUser, rating: score, comment: comment, time: new Date().toLocaleString() }
             };
 
             fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) })
             .then(res => res.json())
             .then(res => {
-                btn.disabled = false;
-                btn.innerText = '提交評分';
                 if(res.status === 'success') {
-                    alert('評分與高清相片已成功上傳至 Google Drive！');
-                    document.getElementById('rating-modal').classList.add('hidden');
-                    loadData();
+                    // 2. 如果有選相片，逐張獨立上傳到 Google Drive
+                    if (ratingPhotosBase64.length > 0) {
+                        let photoPromises = ratingPhotosBase64.map(photoBase64 => {
+                            return fetch(GAS_URL, {
+                                method: 'POST',
+                                body: JSON.stringify({ action: 'uploadPhoto', id: currentRatingRestId, photo: photoBase64 })
+                            }).then(r => r.json());
+                        });
+
+                        return Promise.all(photoPromises).then(() => {
+                            finishRatingSuccess();
+                        });
+                    } else {
+                        finishRatingSuccess();
+                    }
                 } else {
                     alert('提交失敗：' + res.message);
+                    btn.disabled = false;
+                    btn.innerText = '提交評分';
                 }
             }).catch(() => {
                 btn.disabled = false;
@@ -636,13 +678,31 @@
             });
         }
 
+        function finishRatingSuccess() {
+            const btn = document.getElementById('rating-submit-btn');
+            btn.disabled = false;
+            btn.innerText = '提交評分';
+            alert('評分與高清相片已成功上傳至 Google Drive！');
+            document.getElementById('rating-modal').classList.add('hidden');
+            loadData();
+        }
+
         function postComment(id) {
             const text = document.getElementById(`comment-input-${id}`).value.trim();
-            if(!text) return;
+            if(!text && !commentPhotoBase64[id]) return;
 
-            const payload = { action: 'addComment', id: id, user: currentUser, text: text, photo: commentPhotoBase64[id] || '' };
+            const payload = { action: 'addComment', id: id, user: currentUser, text: text || '上傳相片', photo: commentPhotoBase64[id] || '' };
             fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) })
-            .then(() => { commentPhotoBase64[id] = ''; loadData(); });
+            .then(res => res.json())
+            .then(res => {
+                if(res.status === 'success') {
+                    document.getElementById(`comment-input-${id}`).value = '';
+                    removeCommentPhoto(id);
+                    loadData();
+                } else {
+                    alert('發布失敗：' + res.message);
+                }
+            });
         }
 
         function deleteRestaurant(id) {
