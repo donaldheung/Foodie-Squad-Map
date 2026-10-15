@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>為食兵團供應商名錄</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- 高德地圖 JS API 及安全密鑰 -->
     <script type="text/javascript">
         window._AMapSecurityConfig = { securityJsCode: 'f1f597ac7460d64effc41bf06094a83e' };
     </script>
@@ -29,16 +28,14 @@
                 <div>
                     <label class="block text-sm font-medium text-slate-700">選擇帳戶</label>
                     <select id="login-user" class="mt-1 block w-full rounded-lg border border-slate-300 p-2.5 bg-slate-50">
-                        <option value="">載入 Google Sheet 帳號中...</option>
+                        <option value="">載入中...</option>
                     </select>
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-slate-700">安全 PIN 碼</label>
                     <input type="password" id="login-pin" placeholder="請輸入 PIN 碼" class="mt-1 block w-full rounded-lg border border-slate-300 p-2.5 bg-slate-50">
                 </div>
-                <button onclick="handleLogin()" id="login-btn" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-medium py-2.5 rounded-lg transition shadow-md">
-                    進入兵團基地
-                </button>
+                <button onclick="handleLogin()" id="login-btn" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-medium py-2.5 rounded-lg transition shadow-md">進入兵團基地</button>
                 <p id="login-error" class="text-red-500 text-sm text-center hidden"></p>
             </div>
         </div>
@@ -80,7 +77,7 @@
                     <option value="rating">評分最高</option>
                     <option value="visit">造訪次數</option>
                 </select>
-                <input type="text" id="filter-keyword" oninput="renderList()" placeholder="搜尋餐廳 / 菜式..." class="rounded-lg border p-2 text-sm bg-slate-50">
+                <input type="text" id="filter-keyword" oninput="renderList()" placeholder="搜尋餐廳 / 招牌菜..." class="rounded-lg border p-2 text-sm bg-slate-50">
                 <button onclick="triggerLottery()" class="bg-amber-500 hover:bg-amber-600 text-white text-sm rounded-lg py-2 transition">🎰 盲盒抽籤</button>
             </div>
             <div id="restaurant-cards" class="space-y-4"></div>
@@ -96,11 +93,9 @@
                         <input type="text" id="input-name" required class="w-full border p-2.5 rounded-lg text-sm mt-1" placeholder="例如：軟利麵家">
                     </div>
                     <div>
-                        <label class="text-sm font-medium">城市 (可自由輸入或選擇)</label>
+                        <label class="text-sm font-medium">城市</label>
                         <input type="text" id="input-city" list="city-list" value="澳門" class="w-full border p-2.5 rounded-lg text-sm mt-1 bg-slate-50">
-                        <datalist id="city-list">
-                            <option value="澳門"><option value="珠海"><option value="中山"><option value="香港">
-                        </datalist>
+                        <datalist id="city-list"><option value="澳門"><option value="珠海"><option value="中山"><option value="香港"></datalist>
                     </div>
                     <div>
                         <label class="text-sm font-medium">細分區域</label>
@@ -109,6 +104,10 @@
                     <div>
                         <label class="text-sm font-medium">菜式種類</label>
                         <input type="text" id="input-type" class="w-full border p-2.5 rounded-lg text-sm mt-1" placeholder="例如：麵食 / 葡國菜">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="text-sm font-medium">特色 / 招牌推介</label>
+                        <input type="text" id="input-specialty" class="w-full border p-2.5 rounded-lg text-sm mt-1" placeholder="例如：麻婆豆腐、水蟹粥">
                     </div>
                     <div class="md:col-span-2">
                         <label class="text-sm font-medium">詳細地址</label>
@@ -130,23 +129,42 @@
                         <label class="text-sm font-medium">聯絡電話</label>
                         <input type="text" id="input-phone" class="w-full border p-2.5 rounded-lg text-sm mt-1" placeholder="聯絡電話">
                     </div>
-                    <div>
-                        <label class="text-sm font-medium">餐廳相片</label>
-                        <input type="file" id="input-photo-file" accept="image/*" class="w-full border p-2 rounded-lg text-sm mt-1 bg-slate-50" onchange="compressImage(this)">
-                    </div>
                 </div>
                 <input type="hidden" id="input-lng">
                 <input type="hidden" id="input-lat">
-                <input type="hidden" id="input-photo-base64">
-
                 <button type="submit" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-medium py-3 rounded-xl transition shadow-md">確認新增並寫入雲端</button>
             </form>
         </div>
 
         <!-- 地圖頁 -->
         <div id="section-map" class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 hidden space-y-3">
-            <div class="text-sm text-slate-500">📍 點擊地圖標記可查看餐廳詳細資料與導航</div>
             <div id="map"></div>
+        </div>
+    </div>
+
+    <!-- 評分/驗證 Modal -->
+    <div id="rating-modal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 hidden">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
+            <h3 class="text-lg font-bold border-b pb-2">新增評分與記錄</h3>
+            <div class="space-y-3">
+                <div>
+                    <label class="text-xs font-medium">評分 (0-5星)</label>
+                    <input type="number" id="rating-score" min="0" max="5" step="0.5" value="5" class="w-full border p-2 rounded text-sm mt-1">
+                </div>
+                <div>
+                    <label class="text-xs font-medium">用餐短評</label>
+                    <textarea id="rating-comment" class="w-full border p-2 rounded text-sm mt-1" placeholder="寫下食後感..."></textarea>
+                </div>
+                <div>
+                    <label class="text-xs font-medium">上傳當次相片 (可選)</label>
+                    <input type="file" accept="image/*" class="w-full border p-1.5 rounded text-xs mt-1" onchange="encodeRatingImage(this)">
+                    <input type="hidden" id="rating-photo-base64">
+                </div>
+                <div class="flex gap-2 pt-2">
+                    <button onclick="submitRating()" class="flex-1 bg-emerald-600 text-white py-2 rounded-lg text-sm">提交評分</button>
+                    <button onclick="document.getElementById('rating-modal').classList.add('hidden')" class="bg-slate-200 px-4 py-2 rounded-lg text-sm">取消</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -161,37 +179,12 @@
         </div>
     </div>
 
-    <!-- 編輯餐廳 Modal (Admin 專用) -->
-    <div id="edit-modal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 hidden">
-        <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-4">
-            <h3 class="text-lg font-bold border-b pb-2">編輯餐廳資料 (Admin)</h3>
-            <form id="edit-form" onsubmit="submitEditRestaurant(event)" class="space-y-3">
-                <input type="hidden" id="edit-id">
-                <div><label class="text-xs font-medium">餐廳名稱</label><input type="text" id="edit-name" class="w-full border p-2 rounded text-sm"></div>
-                <div class="grid grid-cols-2 gap-2">
-                    <div><label class="text-xs font-medium">城市</label><input type="text" id="edit-city" class="w-full border p-2 rounded text-sm"></div>
-                    <div><label class="text-xs font-medium">區域</label><input type="text" id="edit-district" class="w-full border p-2 rounded text-sm"></div>
-                </div>
-                <div class="grid grid-cols-2 gap-2">
-                    <div><label class="text-xs font-medium">菜式種類</label><input type="text" id="edit-type" class="w-full border p-2 rounded text-sm"></div>
-                    <div><label class="text-xs font-medium">電話</label><input type="text" id="edit-phone" class="w-full border p-2 rounded text-sm"></div>
-                </div>
-                <div><label class="text-xs font-medium">詳細地址</label><input type="text" id="edit-address" class="w-full border p-2 rounded text-sm"></div>
-                <div><label class="text-xs font-medium">營業時間</label><input type="text" id="edit-hours" class="w-full border p-2 rounded text-sm"></div>
-                <div class="flex gap-2 pt-2">
-                    <button type="submit" class="flex-1 bg-amber-600 text-white py-2 rounded-lg text-sm">儲存修改</button>
-                    <button type="button" onclick="document.getElementById('edit-modal').classList.add('hidden')" class="bg-slate-200 px-4 py-2 rounded-lg text-sm">取消</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
     <!-- 抽籤 Modal -->
     <div id="lottery-modal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 hidden">
-        <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 text-center space-y-4">
-            <span class="text-5xl">🎰</span>
-            <h3 class="text-xl font-bold">今日盲盒抽中：</h3>
-            <div id="lottery-result" class="bg-amber-50 p-4 rounded-xl text-amber-900 font-bold text-lg"></div>
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
+            <span class="text-5xl block text-center">🎰</span>
+            <h3 class="text-xl font-bold text-center border-b pb-2">今日盲盒抽中</h3>
+            <div id="lottery-result" class="space-y-2 text-sm"></div>
             <button onclick="document.getElementById('lottery-modal').classList.add('hidden')" class="w-full bg-slate-800 text-white py-2.5 rounded-xl">收到！</button>
         </div>
     </div>
@@ -202,6 +195,8 @@
         let currentUser = null;
         let currentRole = 'member';
         let restaurantsData = [];
+        let currentRatingRestId = null;
+        let commentPhotoBase64 = {};
 
         window.onload = function() {
             fetch(`${GAS_URL}?action=getUsers`)
@@ -210,27 +205,16 @@
                 const select = document.getElementById('login-user');
                 if (res.status === 'success' && res.users.length > 0) {
                     select.innerHTML = res.users.map(u => `<option value="${u.username}">${u.username} (${u.role})</option>`).join('');
-                } else {
-                    select.innerHTML = `<option value="Donald">Donald</option><option value="Agnes">Agnes</option>`;
                 }
-            }).catch(() => {
-                document.getElementById('login-user').innerHTML = `<option value="Donald">Donald</option><option value="Agnes">Agnes</option>`;
             });
         };
 
         function handleLogin() {
             const user = document.getElementById('login-user').value;
             const pin = document.getElementById('login-pin').value;
-            const errEl = document.getElementById('login-error');
-            const btn = document.getElementById('login-btn');
-
-            errEl.classList.add('hidden');
-            btn.innerText = '驗證中...';
-
             fetch(`${GAS_URL}?action=login&username=${encodeURIComponent(user)}&pin=${encodeURIComponent(pin)}`)
             .then(res => res.json())
             .then(res => {
-                btn.innerText = '進入兵團基地';
                 if (res.status === 'success') {
                     currentUser = res.username;
                     currentRole = res.role.toLowerCase();
@@ -239,31 +223,21 @@
                     document.getElementById('app-container').classList.remove('hidden');
                     loadData();
                     initAmapAutocomplete();
-                } else {
-                    errEl.innerText = res.message || 'PIN 碼錯誤';
-                    errEl.classList.remove('hidden');
-                }
-            }).catch(() => {
-                btn.innerText = '進入兵團基地';
-                errEl.innerText = '連線失敗';
-                errEl.classList.remove('hidden');
+                } else { alert(res.message || 'PIN 碼錯誤'); }
             });
         }
 
-        // 簡體轉繁體簡單對照（核心常用字）
         function simpleToTraditional(text) {
             if (!text) return '';
             const map = { '广':'廣','东':'東','区':'區','湾':'灣','门':'門','饭':'飯','店':'店','记':'記','饺':'餃','面':'麵','鲜':'鮮','鱼':'魚','肉':'肉','鸡':'雞' };
-            return text.split('').map(char => map[char] || char).join('');
+            return text.split('').map(c => map[c] || c).join('');
         }
 
         function initAmapAutocomplete() {
             if (typeof AMap === 'undefined') return;
-            AMap.plugin(['AMap.AutoComplete', 'AMap.PlaceSearch'], function() {
-                var autoOptions = { input: "input-name" };
-                var autocomplete = new AMap.AutoComplete(autoOptions);
-                
-                autocomplete.on("select", function(e) {
+            AMap.plugin(['AMap.AutoComplete'], function() {
+                var auto = new AMap.AutoComplete({ input: "input-name" });
+                auto.on("select", function(e) {
                     if (e.poi) {
                         document.getElementById('input-name').value = simpleToTraditional(e.poi.name || '');
                         document.getElementById('input-address').value = simpleToTraditional(e.poi.address || '');
@@ -273,38 +247,16 @@
                             document.getElementById('input-lat').value = e.poi.location.lat;
                         }
                         if (e.poi.district) {
-                            let districtTraditional = simpleToTraditional(e.poi.district);
-                            document.getElementById('input-district').value = districtTraditional;
-                            // 自動判斷城市
-                            if (districtTraditional.includes('珠海')) document.getElementById('input-city').value = '珠海';
-                            else if (districtTraditional.includes('中山')) document.getElementById('input-city').value = '中山';
-                            else if (districtTraditional.includes('香港')) document.getElementById('input-city').value = '香港';
+                            let dist = simpleToTraditional(e.poi.district);
+                            document.getElementById('input-district').value = dist;
+                            if (dist.includes('珠海')) document.getElementById('input-city').value = '珠海';
+                            else if (dist.includes('中山')) document.getElementById('input-city').value = '中山';
+                            else if (dist.includes('香港')) document.getElementById('input-city').value = '香港';
                             else document.getElementById('input-city').value = '澳門';
                         }
                     }
                 });
             });
-        }
-
-        function compressImage(input) {
-            if (input.files && input.files[0]) {
-                const reader = new FileReader();
-                reader.onload = function (e) {
-                    const img = new Image();
-                    img.onload = function () {
-                        const canvas = document.createElement('canvas');
-                        const ctx = canvas.getContext('2d');
-                        const MAX_WIDTH = 600;
-                        const scaleSize = MAX_WIDTH / img.width;
-                        canvas.width = MAX_WIDTH;
-                        canvas.height = img.height * scaleSize;
-                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                        document.getElementById('input-photo-base64').value = canvas.toDataURL('image/jpeg', 0.7);
-                    };
-                    img.src = e.target.result;
-                };
-                reader.readAsDataURL(input.files[0]);
-            }
         }
 
         function switchTab(tab) {
@@ -325,7 +277,7 @@
                     restaurantsData = res.data;
                     renderList();
                 }
-            }).catch(() => { restaurantsData = []; renderList(); });
+            });
         }
 
         function renderList() {
@@ -338,21 +290,8 @@
             let filtered = restaurantsData.filter(item => {
                 const matchCity = !cityFilter || item.city === cityFilter;
                 const matchStatus = !statusFilter || item.status === statusFilter;
-                const matchKw = !keyword || (item.name && item.name.toLowerCase().includes(keyword)) || (item.type && item.type.toLowerCase().includes(keyword));
+                const matchKw = !keyword || (item.name && item.name.toLowerCase().includes(keyword)) || (item.specialty && item.specialty.toLowerCase().includes(keyword));
                 return matchCity && matchStatus && matchKw;
-            });
-
-            // 排序邏輯
-            filtered.sort((a, b) => {
-                if (sortType === 'rating') {
-                    let rA = getLatestRating(a, 'Donald').rating + getLatestRating(a, 'Agnes').rating;
-                    let rB = getLatestRating(b, 'Donald').rating + getLatestRating(b, 'Agnes').rating;
-                    return rB - rA;
-                } else if (sortType === 'visit') {
-                    return (b.visit_count || 0) - (a.visit_count || 0);
-                } else {
-                    return new Date(b.created_at || 0) - new Date(a.created_at || 0);
-                }
             });
 
             if (filtered.length === 0) {
@@ -364,6 +303,7 @@
                 const isVisited = item.status === '已試過';
                 const donaldLatest = getLatestRating(item, 'Donald');
                 const agnesLatest = getLatestRating(item, 'Agnes');
+                const photoCount = (item.photos || []).length;
                 const amapNavUrl = (item.lng && item.lat) 
                     ? `https://uri.amap.com/marker?position=${item.lng},${item.lat}&name=${encodeURIComponent(item.name)}&coordinate=gaode`
                     : `https://uri.amap.com/search?keyword=${encodeURIComponent(item.name)}`;
@@ -375,12 +315,24 @@
                                 <span class="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">${item.city || '澳門'} · ${item.district || '未分類'}</span>
                                 <h3 class="text-lg font-bold mt-1">${item.name}</h3>
                                 <p class="text-xs text-slate-500">${item.type || '美食'} | 📞 ${item.phone || '無'} | 🕒 ${item.hours || '未填'}</p>
+                                ${item.specialty ? `<p class="text-xs text-amber-700 font-medium mt-1">🔥 招牌/特色：${item.specialty}</p>` : ''}
                             </div>
                             <span class="text-xs px-2.5 py-1 rounded-full ${isVisited ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100'}">${item.status || '待試'} ${isVisited ? `(${item.visit_count || 1}次)` : ''}</span>
                         </div>
                         
-                        ${item.photo ? `<div class="overflow-hidden rounded-xl h-48 bg-slate-100"><img src="${item.photo}" class="w-full h-full object-cover"></div>` : ''}
                         <p class="text-sm text-slate-600 bg-slate-50 p-2.5 rounded-xl">📍 ${item.address || '無地址'}</p>
+
+                        <!-- 相片展開按鈕區 -->
+                        ${photoCount > 0 ? `
+                            <div>
+                                <button onclick="togglePhotos('${item.id}')" class="text-xs text-amber-700 font-semibold bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200 hover:bg-amber-100 transition">
+                                    📸 睇相片 (${photoCount}張) <span id="photo-arrow-${item.id}">▼</span>
+                                </button>
+                                <div id="photo-gallery-${item.id}" class="grid grid-cols-3 gap-2 mt-2 hidden">
+                                    ${item.photos.map(p => `<img src="${p}" class="w-full h-24 object-cover rounded-lg border">`).join('')}
+                                </div>
+                            </div>
+                        ` : ''}
                         
                         <!-- 固定的 Donald & Agnes 最新評分區 -->
                         <div class="grid grid-cols-2 gap-3 pt-2 border-t text-xs">
@@ -396,31 +348,51 @@
                             </div>
                         </div>
 
-                        <!-- 留言區 (全員共享) -->
+                        <!-- 交流區 (全員共享) -->
                         <div class="bg-slate-50 p-3 rounded-xl space-y-2 text-xs">
                             <div class="font-bold text-slate-700">💬 兵團成員交流區</div>
-                            <div class="space-y-1 max-h-32 overflow-y-auto">
+                            <div class="space-y-1 max-h-40 overflow-y-auto">
                                 ${(!item.comments || item.comments.length === 0) ? '<div class="text-slate-400">暫無留言，快來發表心得！</div>' : 
-                                    item.comments.map(c => `<div class="bg-white p-2 rounded border border-slate-100"><span class="font-semibold text-amber-800">${c.user}</span>:${c.text} <span class="text-[9px] text-slate-400 float-right">${c.time}</span></div>`).join('')
+                                    item.comments.map(c => `
+                                        <div class="bg-white p-2 rounded border border-slate-100 space-y-1">
+                                            <div class="flex justify-between"><span class="font-semibold text-amber-800">${c.user}</span><span class="text-[9px] text-slate-400">${c.time}</span></div>
+                                            <div>${c.text}</div>${c.photo ? `<img src="${c.photo}" class="w-20 h-20 object-cover rounded mt-1 border">` : ''}
+                                        </div>
+                                    `).join('')
                                 }
                             </div>
-                            <div class="flex gap-2 mt-2">
-                                <input type="text" id="comment-input-${item.id}" placeholder="寫下您的心得..." class="flex-1 border rounded px-2 py-1 bg-white">
-                                <button onclick="postComment('${item.id}')" class="bg-slate-800 text-white px-3 py-1 rounded">發布</button>
+                            <div class="space-y-1 pt-1">
+                                <div class="flex gap-2">
+                                    <input type="text" id="comment-input-${item.id}" placeholder="寫下您的心得..." class="flex-1 border rounded px-2 py-1 bg-white">
+                                    <button onclick="postComment('${item.id}')" class="bg-slate-800 text-white px-3 py-1 rounded">發布</button>
+                                </div>
+                                <div class="flex items-center gap-2 text-[10px] text-slate-500">
+                                    <span>附加相片:</span>
+                                    <input type="file" accept="image/*" class="text-[10px]" onchange="encodeCommentImage('${item.id}', this)">
+                                </div>
                             </div>
                         </div>
 
                         <div class="flex gap-2 pt-2 flex-wrap">
                             <a href="${amapNavUrl}" target="_blank" class="bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg text-xs transition">🗺️ 高德導航</a>
-                            <button onclick="markVisited('${item.id}', ${item.visit_count || 0})" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs transition">✨ 標記已試過 / 新增評分</button>
-                            ${currentRole === 'admin' ? `
-                                <button onclick="openEditModal('${item.id}')" class="bg-amber-100 hover:bg-amber-200 text-amber-800 px-3 py-1.5 rounded-lg text-xs transition">✏️ 編輯 (Admin)</button>
-                                <button onclick="deleteRestaurant('${item.id}')" class="bg-red-50 hover:bg-red-100 text-red-600 px-3 py-1.5 rounded-lg text-xs transition">🗑️ 刪除 (Admin)</button>
-                            ` : ''}
+                            <button onclick="openRatingModal('${item.id}')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs transition">✨ 標記已試過 / 新增評分</button>
+                            ${currentRole === 'admin' ? `<button onclick="deleteRestaurant('${item.id}')" class="bg-red-50 hover:bg-red-100 text-red-600 px-3 py-1.5 rounded-lg text-xs transition">🗑️ 刪除 (Admin)</button>` : ''}
                         </div>
                     </div>
                 `;
             }).join('');
+        }
+
+        function togglePhotos(id) {
+            const gallery = document.getElementById(`photo-gallery-${id}`);
+            const arrow = document.getElementById(`photo-arrow-${id}`);
+            if (gallery.classList.contains('hidden')) {
+                gallery.classList.remove('hidden');
+                arrow.innerText = '▲';
+            } else {
+                gallery.classList.add('hidden');
+                arrow.innerText = '▼';
+            }
         }
 
         function getLatestRating(item, targetUser) {
@@ -463,12 +435,12 @@
                 city: document.getElementById('input-city').value,
                 district: document.getElementById('input-district').value,
                 type: document.getElementById('input-type').value,
+                specialty: document.getElementById('input-specialty').value,
                 address: document.getElementById('input-address').value,
                 hours: `${timeStart}-${timeEnd}`,
                 phone: document.getElementById('input-phone').value,
                 lng: document.getElementById('input-lng').value,
                 lat: document.getElementById('input-lat').value,
-                photo: document.getElementById('input-photo-base64').value,
                 created_by: currentUser
             };
 
@@ -476,64 +448,71 @@
             .then(() => { alert('成功加入兵團名錄！'); document.getElementById('add-form').reset(); switchTab('list'); loadData(); });
         }
 
-        function markVisited(id, count) {
-            const rating = prompt(`[${currentUser}] 請輸入您的評分 (0-5星)：`, "5");
-            if(rating === null) return;
-            const comment = prompt(`[${currentUser}] 請輸入用餐短評：`, "味道極佳！");
-            if(comment === null) return;
+        function openRatingModal(id) {
+            currentRatingRestId = id;
+            document.getElementById('rating-score').value = 5;
+            document.getElementById('rating-comment').value = '';
+            document.getElementById('rating-photo-base64').value = '';
+            document.getElementById('rating-modal').classList.remove('hidden');
+        }
+
+        function encodeRatingImage(input) {
+            if (input.files && input.files[0]) {
+                compressFile(input.files[0], base64 => { document.getElementById('rating-photo-base64').value = base64; });
+            }
+        }
+
+        function encodeCommentImage(id, input) {
+            if (input.files && input.files[0]) {
+                compressFile(input.files[0], base64 => { commentPhotoBase64[id] = base64; });
+            }
+        }
+
+        function compressFile(file, callback) {
+            const reader = new FileReader();
+            reader.onload = e => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const MAX = 500;
+                    const scale = MAX / img.width;
+                    canvas.width = MAX;
+                    canvas.height = img.height * scale;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    callback(canvas.toDataURL('image/jpeg', 0.6));
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function submitRating() {
+            const item = restaurantsData.find(i => i.id === currentRatingRestId);
+            const score = parseFloat(document.getElementById('rating-score').value);
+            const comment = document.getElementById('rating-comment').value;
+            const photo = document.getElementById('rating-photo-base64').value;
 
             const payload = {
                 action: 'updateRestaurant',
-                id: id,
+                id: currentRatingRestId,
                 status: '已試過',
-                visit_count: count + 1,
-                new_rating: { user: currentUser, rating: parseFloat(rating), comment: comment, time: new Date().toLocaleString() }
+                visit_count: (item ? item.visit_count || 0 : 0) + 1,
+                new_rating: { user: currentUser, rating: score, comment: comment, time: new Date().toLocaleString() },
+                new_photo: photo
             };
 
             fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) })
-            .then(() => { alert('評分記錄成功！'); loadData(); });
+            .then(() => { alert('評分記錄成功！'); document.getElementById('rating-modal').classList.add('hidden'); loadData(); });
         }
 
         function postComment(id) {
             const text = document.getElementById(`comment-input-${id}`).value.trim();
             if(!text) return;
 
-            const payload = { action: 'addComment', id: id, user: currentUser, text: text };
+            const payload = { action: 'addComment', id: id, user: currentUser, text: text, photo: commentPhotoBase64[id] || '' };
             fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) })
-            .then(() => { document.getElementById(`comment-input-${id}`).value = ''; loadData(); });
-        }
-
-        function openEditModal(id) {
-            const item = restaurantsData.find(i => i.id === id);
-            if(!item) return;
-            document.getElementById('edit-id').value = item.id;
-            document.getElementById('edit-name').value = item.name || '';
-            document.getElementById('edit-city').value = item.city || '';
-            document.getElementById('edit-district').value = item.district || '';
-            document.getElementById('edit-type').value = item.type || '';
-            document.getElementById('edit-address').value = item.address || '';
-            document.getElementById('edit-hours').value = item.hours || '';
-            document.getElementById('edit-phone').value = item.phone || '';
-            document.getElementById('edit-modal').classList.remove('hidden');
-        }
-
-        function submitEditRestaurant(event) {
-            event.preventDefault();
-            const payload = {
-                action: 'updateRestaurant',
-                edit_info: true,
-                id: document.getElementById('edit-id').value,
-                name: document.getElementById('edit-name').value,
-                city: document.getElementById('edit-city').value,
-                district: document.getElementById('edit-district').value,
-                type: document.getElementById('edit-type').value,
-                address: document.getElementById('edit-address').value,
-                hours: document.getElementById('edit-hours').value,
-                phone: document.getElementById('edit-phone').value
-            };
-
-            fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) })
-            .then(() => { alert('餐廳資料更新成功！'); document.getElementById('edit-modal').classList.add('hidden'); loadData(); });
+            .then(() => { commentPhotoBase64[id] = ''; loadData(); });
         }
 
         function deleteRestaurant(id) {
@@ -546,27 +525,29 @@
             const pending = restaurantsData.filter(i => i.status === '待試');
             if(pending.length === 0) { alert('暫無待試餐廳！'); return; }
             const pick = pending[Math.floor(Math.random() * pending.length)];
-            document.getElementById('lottery-result').innerHTML = `<b>${pick.name}</b><br><span class="text-xs text-slate-500">${pick.city} · ${pick.type || '美食'}</span>`;
+            
+            document.getElementById('lottery-result').innerHTML = `
+                <div class="bg-amber-50 p-4 rounded-xl border border-amber-200 text-amber-900 space-y-2">
+                    <div class="font-bold text-lg text-amber-800">${pick.name}</div>
+                    <div>📍 <b>地址：</b>${pick.address || '無'}</div>
+                    <div>🏙️ <b>城市/區域：</b>${pick.city} · ${pick.district || '未分類'}</div>
+                    <div>🍲 <b>菜式種類：</b>${pick.type || '未填'}</div>
+                    ${pick.specialty ? `<div>🔥 <b>招牌推介：</b>${pick.specialty}</div>` : ''}
+                    <div>🕒 <b>營業時間：</b>${pick.hours || '未填'}</div>
+                    <div>📞 <b>聯絡電話：</b>${pick.phone || '無'}</div>
+                </div>
+            `;
             document.getElementById('lottery-modal').classList.remove('hidden');
         }
 
-        // 使用原生高德地圖渲染美食地圖
         function initAmap() {
             if (!window.amapObj) {
-                window.amapObj = new AMap.Map('map', {
-                    zoom: 13,
-                    center: [113.543, 22.198] // 澳門中心點
-                });
+                window.amapObj = new AMap.Map('map', { zoom: 13, center: [113.543, 22.198] });
             }
-            
-            // 清除舊標記並加入已輸入的餐廳標記
             window.amapObj.clearMap();
             restaurantsData.forEach(item => {
                 if (item.lng && item.lat) {
-                    var marker = new AMap.Marker({
-                        position: [parseFloat(item.lng), parseFloat(item.lat)],
-                        title: item.name
-                    });
+                    var marker = new AMap.Marker({ position: [parseFloat(item.lng), parseFloat(item.lat)], title: item.name });
                     marker.on('click', function() {
                         var infoWindow = new AMap.InfoWindow({
                             content: `<div style="padding:5px;"><b>${item.name}</b><br>${item.address || ''}<br><a href="https://uri.amap.com/marker?position=${item.lng},${item.lat}&name=${encodeURIComponent(item.name)}&coordinate=gaode" target="_blank" style="color:#2563eb;">高德導航</a></div>`,
