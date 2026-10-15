@@ -147,14 +147,22 @@
         </div>
     </div>
 
-    <!-- 評分 Modal (支援相片多選與刪除) -->
+    <!-- 評分 Modal -->
     <div id="rating-modal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 hidden">
         <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
             <h3 class="text-lg font-bold border-b pb-2">新增評分與記錄</h3>
             <div class="space-y-3">
                 <div>
-                    <label class="text-xs font-medium">評分 (0-5星)</label>
-                    <input type="number" id="rating-score" min="0" max="5" step="0.5" value="5" class="w-full border p-2 rounded text-sm mt-1">
+                    <label class="text-xs font-medium">評分星級</label>
+                    <div class="flex items-center gap-1 mt-1 text-2xl" id="star-container">
+                        <span onclick="setRating(1)" class="cursor-pointer text-amber-400">⭐</span>
+                        <span onclick="setRating(2)" class="cursor-pointer text-amber-400">⭐</span>
+                        <span onclick="setRating(3)" class="cursor-pointer text-amber-400">⭐</span>
+                        <span onclick="setRating(4)" class="cursor-pointer text-amber-400">⭐</span>
+                        <span onclick="setRating(5)" class="cursor-pointer text-amber-400">⭐</span>
+                        <span id="rating-text" class="text-sm font-bold ml-2 text-amber-600">5.0 / 5星</span>
+                    </div>
+                    <input type="hidden" id="rating-score" value="5">
                 </div>
                 <div>
                     <label class="text-xs font-medium">用餐短評</label>
@@ -201,9 +209,8 @@
         let currentRole = 'member';
         let restaurantsData = [];
         let currentRatingRestId = null;
-        
-        let ratingPhotosBase64 = []; // 暫存評分相片 Base64 陣列
-        let commentPhotoBase64 = {};  // 暫存留言相片
+        let ratingPhotosBase64 = [];
+        let commentPhotoBase64 = {};
 
         const simToTradMap = {
             '广':'廣','东':'東','区':'區','湾':'灣','门':'門','饭':'飯','店':'店','记':'記','饺':'餃','面':'麵','鲜':'鮮','鱼':'魚','肉':'肉','鸡':'雞',
@@ -496,13 +503,21 @@
         function openRatingModal(id) {
             currentRatingRestId = id;
             ratingPhotosBase64 = [];
-            document.getElementById('rating-score').value = 5;
+            setRating(5);
             document.getElementById('rating-comment').value = '';
             document.getElementById('rating-photo-preview').innerHTML = '';
             document.getElementById('rating-modal').classList.remove('hidden');
         }
 
-        // 處理評分 Modal 多張相片上傳與預覽
+        function setRating(val) {
+            document.getElementById('rating-score').value = val;
+            document.getElementById('rating-text').innerText = `${val.toFixed(1)} / 5星`;
+            const stars = document.querySelectorAll('#star-container span:not(#rating-text)');
+            stars.forEach((star, idx) => {
+                star.style.opacity = idx < val ? '1' : '0.3';
+            });
+        }
+
         function handleRatingPhotos(input) {
             if (input.files && input.files.length > 0) {
                 Array.from(input.files).forEach(file => {
@@ -511,7 +526,7 @@
                         renderRatingPhotoPreview();
                     });
                 });
-                input.value = ''; // 重置 input 允許重複選擇
+                input.value = '';
             }
         }
 
@@ -542,13 +557,13 @@
                 const img = new Image();
                 img.onload = () => {
                     const canvas = document.createElement('canvas');
-                    const MAX = 500;
+                    const MAX = 400; // 限制最大寬度以防超過 GAS 封包大小
                     const scale = MAX / img.width;
                     canvas.width = MAX;
                     canvas.height = img.height * scale;
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                    callback(canvas.toDataURL('image/jpeg', 0.6));
+                    callback(canvas.toDataURL('image/jpeg', 0.5));
                 };
                 img.src = e.target.result;
             };
@@ -556,45 +571,41 @@
         }
 
         function submitRating() {
+            const btn = document.getElementById('rating-submit-btn');
+            if (btn.disabled) return;
+            btn.disabled = true;
+            btn.innerText = '提交中...';
+
             const item = restaurantsData.find(i => i.id === currentRatingRestId);
             const score = parseFloat(document.getElementById('rating-score').value);
             const comment = document.getElementById('rating-comment').value;
 
-            const btn = document.getElementById('rating-submit-btn');
-            btn.disabled = true;
-            btn.innerText = '提交中...';
-
+            // 一次過將評分與所有相片打包發送
             const payload = {
                 action: 'updateRestaurant',
                 id: currentRatingRestId,
                 status: '已試過',
                 visit_count: (item ? item.visit_count || 0 : 0) + 1,
-                new_rating: { user: currentUser, rating: score, comment: comment, time: new Date().toLocaleString() }
+                new_rating: { user: currentUser, rating: score, comment: comment, time: new Date().toLocaleString() },
+                new_photos: ratingPhotosBase64
             };
 
-            // 如果有照片，逐一發送新增照片請求（或第一張附加進去）
-            let chain = fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) });
-
-            if (ratingPhotosBase64.length > 0) {
-                ratingPhotosBase64.forEach(photoBase64 => {
-                    chain = chain.then(() => {
-                        return fetch(GAS_URL, {
-                            method: 'POST',
-                            body: JSON.stringify({ action: 'updateRestaurant', id: currentRatingRestId, new_photo: photoBase64 })
-                        });
-                    });
-                });
-            }
-
-            chain.then(() => {
+            fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) })
+            .then(res => res.json())
+            .then(res => {
                 btn.disabled = false;
                 btn.innerText = '提交評分';
-                alert('評分與相片記錄成功！');
-                document.getElementById('rating-modal').classList.add('hidden');
-                loadData();
+                if(res.status === 'success') {
+                    alert('評分與相片記錄成功！');
+                    document.getElementById('rating-modal').classList.add('hidden');
+                    loadData();
+                } else {
+                    alert('提交失敗：' + res.message);
+                }
             }).catch(() => {
                 btn.disabled = false;
                 btn.innerText = '提交評分';
+                alert('網絡連線失敗');
             });
         }
 
@@ -629,7 +640,7 @@
                     <div>📞 <b>聯絡電話：</b>${pick.phone || '無'}</div>
                 </div>
             `;
-            document.getElementById('lottery-modal').classList.remove('hidden');
+            document.getElementById('lottery-modal').classList.add('hidden');
         }
 
         function initAmap() {
