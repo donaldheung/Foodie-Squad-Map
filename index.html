@@ -221,7 +221,7 @@
         let restaurantsData = [];
         let currentRatingRestId = null;
         let ratingPhotosBase64 = [];
-        let commentPhotosMap = {}; // 支持交流區多圖上傳 { restId: [base64_1, base64_2] }
+        let commentPhotosMap = {};
 
         const simToTradMap = {
             '广':'廣','东':'東','区':'區','湾':'灣','门':'門','饭':'飯','店':'店','记':'記','饺':'餃','面':'麵','鲜':'鮮','鱼':'魚','肉':'肉','鸡':'雞',
@@ -239,7 +239,6 @@
             return res;
         }
 
-        // 發送 FormUrlEncoded 資料
         function postForm(payloadObj) {
             const body = new URLSearchParams();
             for (let k in payloadObj) {
@@ -584,7 +583,6 @@
             renderRatingPhotoPreview();
         }
 
-        // 交流區多相片選取與預覽
         function handleCommentPhotos(id, input) {
             if (input.files && input.files.length > 0) {
                 if (!commentPhotosMap[id]) commentPhotosMap[id] = [];
@@ -616,7 +614,6 @@
             }
         }
 
-        // 💡 關鍵：壓縮至 800px 寬高以內、品質 0.65，避免被網路與 GAS 阻擋
         function compressFile(file, callback) {
             const reader = new FileReader();
             reader.onload = e => {
@@ -648,54 +645,42 @@
             reader.readAsDataURL(file);
         }
 
+        // 💡 關鍵升級：將文字評分與相片陣列一次過打包傳送到後端
         async function submitRating() {
             const btn = document.getElementById('rating-submit-btn');
             if (btn.disabled) return;
             btn.disabled = true;
-            btn.innerText = '儲存評分中...';
+            btn.innerText = '上傳相片並儲存評分中...';
 
             const item = restaurantsData.find(i => i.id === currentRatingRestId);
             const score = parseFloat(document.getElementById('rating-score').value);
             const comment = document.getElementById('rating-comment').value;
 
             try {
-                // 1. 送出評分文字
-                const res = await postForm({
-                    action: 'updateRestaurant',
+                const payload = {
+                    action: 'updateRestaurantWithPhotos',
                     id: currentRatingRestId,
                     status: '已試過',
                     visit_count: (item ? item.visit_count || 0 : 0) + 1,
-                    new_rating: { user: currentUser, rating: score, comment: comment, time: new Date().toLocaleString() }
-                });
+                    new_rating: { user: currentUser, rating: score, comment: comment, time: new Date().toLocaleString() },
+                    photos: ratingPhotosBase64 // 一次過把所有相片 Base64 傳過去
+                };
 
+                const res = await postForm(payload);
                 if(res.status === 'success') {
-                    // 2. 如果有照片，一張一張依序獨立上傳
-                    if (ratingPhotosBase64.length > 0) {
-                        for (let i = 0; i < ratingPhotosBase64.length; i++) {
-                            btn.innerText = `上傳相片 (${i + 1}/${ratingPhotosBase64.length})...`;
-                            await postForm({ action: 'uploadPhoto', id: currentRatingRestId, photo: ratingPhotosBase64[i] });
-                        }
-                    }
-                    finishRatingSuccess();
+                    alert('評分與相片已成功上傳至 Google Drive！');
+                    document.getElementById('rating-modal').classList.add('hidden');
+                    loadData();
                 } else {
                     alert('提交失敗：' + res.message);
-                    btn.disabled = false;
-                    btn.innerText = '提交評分';
                 }
+                btn.disabled = false;
+                btn.innerText = '提交評分';
             } catch (err) {
                 btn.disabled = false;
                 btn.innerText = '提交評分';
                 alert('上傳失敗，請重試！');
             }
-        }
-
-        function finishRatingSuccess() {
-            const btn = document.getElementById('rating-submit-btn');
-            btn.disabled = false;
-            btn.innerText = '提交評分';
-            alert('評分與相片已成功上傳至 Google Drive！');
-            document.getElementById('rating-modal').classList.add('hidden');
-            loadData();
         }
 
         async function postComment(id) {
@@ -710,24 +695,25 @@
             btn.innerText = '發布中...';
 
             try {
-                // 發布第一個留言文字與首張相片
-                let firstPhoto = photos.length > 0 ? photos[0] : '';
-                const payload = { action: 'addComment', id: id, user: currentUser, text: text || '上傳相片', photo: firstPhoto };
-                await postForm(payload);
+                const payload = {
+                    action: 'addCommentWithPhotos',
+                    id: id,
+                    user: currentUser,
+                    text: text || '上傳相片',
+                    photos: photos // 交流區支援多圖一次發布
+                };
 
-                // 如果交流區有多於 1 張相片，將其餘相片逐張作為附圖留言發布
-                if (photos.length > 1) {
-                    for (let i = 1; i < photos.length; i++) {
-                        await postForm({ action: 'addComment', id: id, user: currentUser, text: '附圖', photo: photos[i] });
-                    }
+                const res = await postForm(payload);
+                if(res.status === 'success') {
+                    textInput.value = '';
+                    commentPhotosMap[id] = [];
+                    renderCommentPhotoPreview(id);
+                    loadData();
+                } else {
+                    alert('發布失敗：' + res.message);
                 }
-
-                textInput.value = '';
-                commentPhotosMap[id] = [];
-                renderCommentPhotoPreview(id);
                 btn.disabled = false;
                 btn.innerText = '發布';
-                loadData();
             } catch(e) {
                 btn.disabled = false;
                 btn.innerText = '發布';
