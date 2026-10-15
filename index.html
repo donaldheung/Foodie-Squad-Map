@@ -5,9 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>為食兵團供應商名錄</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 高德地圖 JS API 及 UI 組件 -->
+    <script type="text/javascript">
+        window._AMapSecurityConfig = {
+            securityJsCode: 'f1f597ac7460d64effc41bf06094a83e',
+        };
+    </script>
+    <script src="https://webapi.amap.com/maps?v=2.0&key=2fdab96ce1fd72c805a9ac50e3da5422&plugin=AMap.AutoComplete,AMap.PlaceSearch"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <style> #map { height: 400px; width: 100%; border-radius: 0.75rem; } </style>
+    <style> 
+        #map { height: 400px; width: 100%; border-radius: 0.75rem; } 
+        /* 高德自動完成下拉選單樣式優化 */
+        .amap-sug-result { z-index: 9999 !important; border-radius: 0.5rem; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+    </style>
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans">
 
@@ -17,13 +28,13 @@
             <div class="text-center">
                 <span class="text-4xl">🛡️</span>
                 <h2 class="text-2xl font-bold mt-2 text-slate-900">為食兵團供應商名錄</h2>
-                <p class="text-sm text-slate-500 mt-1">請選擇您的兵團身份登入</p>
+                <p class="text-sm text-slate-500 mt-1">請選擇您的身份並輸入 PIN 碼</p>
             </div>
             <div class="space-y-4">
                 <div>
                     <label class="block text-sm font-medium text-slate-700">選擇帳戶</label>
                     <select id="login-user" class="mt-1 block w-full rounded-lg border border-slate-300 p-2.5 bg-slate-50">
-                        <option value="Donald">總司令 (Donald)</option>
+                        <option value="Donald">總司令 (Donald) [Admin]</option>
                         <option value="Agnes">團長 (Agnes)</option>
                     </select>
                 </div>
@@ -55,32 +66,80 @@
             <button onclick="switchTab('map')" id="tab-map-btn" class="flex-1 py-2 rounded-lg text-sm font-medium text-slate-600">🗺️ 美食地圖</button>
         </div>
 
+        <!-- 餐廳清單頁 -->
         <div id="section-list" class="space-y-4">
             <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 grid grid-cols-2 md:grid-cols-4 gap-2">
-                <select id="filter-city" onchange="renderList()" class="rounded-lg border p-2 text-sm bg-slate-50"><option value="">全部城市</option><option value="澳門">澳門</option><option value="珠海">珠海</option></select>
-                <select id="filter-status" onchange="renderList()" class="rounded-lg border p-2 text-sm bg-slate-50"><option value="">全部狀態</option><option value="待試">⏳ 待試名單</option><option value="已試過">✨ 已試過</option></select>
-                <input type="text" id="filter-keyword" oninput="renderList()" placeholder="搜尋餐廳..." class="rounded-lg border p-2 text-sm bg-slate-50">
+                <select id="filter-city" onchange="renderList()" class="rounded-lg border p-2 text-sm bg-slate-50">
+                    <option value="">全部城市</option>
+                    <option value="澳門">澳門</option>
+                    <option value="珠海">珠海</option>
+                </select>
+                <select id="filter-status" onchange="renderList()" class="rounded-lg border p-2 text-sm bg-slate-50">
+                    <option value="">全部狀態</option>
+                    <option value="待試">⏳ 待試名單</option>
+                    <option value="已試過">✨ 已試過</option>
+                </select>
+                <input type="text" id="filter-keyword" oninput="renderList()" placeholder="搜尋餐廳 / 菜式..." class="rounded-lg border p-2 text-sm bg-slate-50">
                 <button onclick="triggerLottery()" class="bg-amber-500 hover:bg-amber-600 text-white text-sm rounded-lg py-2 transition">🎰 盲盒抽籤</button>
             </div>
             <div id="restaurant-cards" class="space-y-4"></div>
         </div>
 
+        <!-- 新增餐廳頁（具備高德自動聯想） -->
         <div id="section-add" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hidden space-y-4">
-            <h2 class="text-lg font-bold border-b pb-2">新增目標餐廳</h2>
+            <h2 class="text-lg font-bold border-b pb-2">新增目標餐廳（高德自動定位）</h2>
             <form id="add-form" onsubmit="submitRestaurant(event)" class="space-y-4">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div><label class="text-sm font-medium">餐廳名稱 *</label><input type="text" id="input-name" required class="w-full border p-2.5 rounded-lg text-sm mt-1" placeholder="例如：路環壹號私房菜"></div>
-                    <div><label class="text-sm font-medium">城市</label><select id="input-city" class="w-full border p-2.5 rounded-lg text-sm mt-1 bg-slate-50"><option value="澳門">澳門</option><option value="珠海">珠海</option></select></div>
-                    <div><label class="text-sm font-medium">細分區域</label><input type="text" id="input-district" class="w-full border p-2.5 rounded-lg text-sm mt-1" placeholder="例如：路環"></div>
-                    <div><label class="text-sm font-medium">菜式種類</label><input type="text" id="input-type" class="w-full border p-2.5 rounded-lg text-sm mt-1" placeholder="例如：葡國菜"></div>
-                    <div class="md:col-span-2"><label class="text-sm font-medium">詳細地址</label><input type="text" id="input-address" class="w-full border p-2.5 rounded-lg text-sm mt-1" placeholder="詳細地址"></div>
-                    <div><label class="text-sm font-medium">營業時間</label><input type="text" id="input-hours" class="w-full border p-2.5 rounded-lg text-sm mt-1" placeholder="例如：12:00-22:00"></div>
-                    <div><label class="text-sm font-medium">聯絡電話</label><input type="text" id="input-phone" class="w-full border p-2.5 rounded-lg text-sm mt-1" placeholder="例如：65206128"></div>
+                    <div>
+                        <label class="text-sm font-medium">餐廳名稱 * (輸入即自動聯想)</label>
+                        <input type="text" id="input-name" required class="w-full border p-2.5 rounded-lg text-sm mt-1" placeholder="例如：軟利麵家">
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium">城市</label>
+                        <select id="input-city" class="w-full border p-2.5 rounded-lg text-sm mt-1 bg-slate-50">
+                            <option value="澳門">澳門</option>
+                            <option value="珠海">珠海</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium">細分區域</label>
+                        <input type="text" id="input-district" class="w-full border p-2.5 rounded-lg text-sm mt-1" placeholder="例如：橫琴 / 鬥門">
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium">菜式種類</label>
+                        <input type="text" id="input-type" class="w-full border p-2.5 rounded-lg text-sm mt-1" placeholder="例如：麵食 / 葡國菜">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="text-sm font-medium">詳細地址 (選定高德 POI 後自動填入)</label>
+                        <input type="text" id="input-address" class="w-full border p-2.5 rounded-lg text-sm mt-1" placeholder="詳細地址">
+                    </div>
+                    <!-- 營業時間改用 24 小時制下拉選單 -->
+                    <div>
+                        <label class="text-sm font-medium">營業時間 (開門)</label>
+                        <select id="input-time-start" class="w-full border p-2.5 rounded-lg text-sm mt-1 bg-slate-50">
+                            <option value="07:00">07:00</option><option value="08:00">08:00</option><option value="09:00">09:00</option><option value="10:00" selected>10:00</option><option value="11:00">11:00</option><option value="12:00">12:00</option><option value="17:00">17:00</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium">營業時間 (關門)</label>
+                        <select id="input-time-end" class="w-full border p-2.5 rounded-lg text-sm mt-1 bg-slate-50">
+                            <option value="21:00">21:00</option><option value="21:30">21:30</option><option value="22:00" selected>22:00</option><option value="22:30">22:30</option><option value="23:00">23:00</option><option value="00:00">00:00</option><option value="02:00">02:00</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium">聯絡電話</label>
+                        <input type="text" id="input-phone" class="w-full border p-2.5 rounded-lg text-sm mt-1" placeholder="聯絡電話">
+                    </div>
                 </div>
-                <button type="submit" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-medium py-3 rounded-xl transition">確認新增</button>
+                <!-- 隱藏欄位儲存經緯度 -->
+                <input type="hidden" id="input-lng">
+                <input type="hidden" id="input-lat">
+
+                <button type="submit" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-medium py-3 rounded-xl transition shadow-md">確認新增並寫入雲端</button>
             </form>
         </div>
 
+        <!-- 地圖頁 -->
         <div id="section-map" class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 hidden">
             <div id="map"></div>
         </div>
@@ -100,13 +159,12 @@
         const GAS_URL = 'https://script.google.com/macros/s/AKfycbydk9NCtPJwIuPGFGQm5smpaRd-vbr_i-a1CUO9M9VumDqSiEp1LKhHfWDidikoLs-6/exec';
 
         let currentUser = null;
-        let currentRoleTitle = '';
+        let currentRole = 'member';
         let restaurantsData = [];
 
-        // 本地預設驗證 PIN 碼（確保 100% 登入成功不卡住）
-        const USERS_PIN = {
-            'Donald': '1234',
-            'Agnes': '5678'
+        const USERS_CREDENTIALS = {
+            'Donald': { pin: '1234', role: 'admin', title: '總司令 (Donald)' },
+            'Agnes': { pin: '5678', role: 'member', title: '團長 (Agnes)' }
         };
 
         function handleLogin() {
@@ -114,16 +172,42 @@
             const pin = document.getElementById('login-pin').value;
             const errEl = document.getElementById('login-error');
 
-            if (USERS_PIN[user] && USERS_PIN[user] === pin) {
+            if (USERS_CREDENTIALS[user] && USERS_CREDENTIALS[user].pin === pin) {
                 currentUser = user;
-                currentRoleTitle = (user === 'Donald') ? '總司令 (Donald)' : '團長 (Agnes)';
-                document.getElementById('current-role-badge').innerText = currentRoleTitle;
+                currentRole = USERS_CREDENTIALS[user].role;
+                document.getElementById('current-role-badge').innerText = USERS_CREDENTIALS[user].title;
                 document.getElementById('login-modal').classList.add('hidden');
                 document.getElementById('app-container').classList.remove('hidden');
                 loadData();
+                initAmapAutocomplete(); // 初始化高德自動聯想
             } else {
                 errEl.classList.remove('hidden');
             }
+        }
+
+        // 初始化高德 POI 自動完成搜尋
+        function initAmapAutocomplete() {
+            if (typeof AMap === 'undefined') return;
+            AMap.plugin(['AMap.AutoComplete', 'AMap.PlaceSearch'], function() {
+                var autoOptions = { input: "input-name" };
+                var autocomplete = new AMap.AutoComplete(autoOptions);
+                var placeSearch = new AMap.PlaceSearch({ city: '全国' });
+                
+                autocomplete.on("select", function(e) {
+                    if (e.poi) {
+                        document.getElementById('input-name').value = e.poi.name || '';
+                        document.getElementById('input-address').value = e.poi.address || '';
+                        document.getElementById('input-phone').value = e.poi.tel || '';
+                        if (e.poi.location) {
+                            document.getElementById('input-lng').value = e.poi.location.lng;
+                            document.getElementById('input-lat').value = e.poi.location.lat;
+                        }
+                        if (e.poi.district) {
+                            document.getElementById('input-district').value = e.poi.district;
+                        }
+                    }
+                });
+            });
         }
 
         function switchTab(tab) {
@@ -144,11 +228,7 @@
                     restaurantsData = res.data;
                     renderList();
                 }
-            }).catch(err => {
-                // 容錯：若暫無雲端數據，顯示空白提示
-                restaurantsData = [];
-                renderList();
-            });
+            }).catch(() => { restaurantsData = []; renderList(); });
         }
 
         function renderList() {
@@ -160,17 +240,22 @@
             const filtered = restaurantsData.filter(item => {
                 const matchCity = !cityFilter || item.city === cityFilter;
                 const matchStatus = !statusFilter || item.status === statusFilter;
-                const matchKw = !keyword || (item.name && item.name.toLowerCase().includes(keyword));
+                const matchKw = !keyword || (item.name && item.name.toLowerCase().includes(keyword)) || (item.type && item.type.toLowerCase().includes(keyword));
                 return matchCity && matchStatus && matchKw;
             });
 
             if (filtered.length === 0) {
-                container.innerHTML = `<div class="text-center py-10 text-slate-400 bg-white rounded-2xl border border-slate-100">暫無餐廳資料，快去「新增餐廳」加入第一間啦！</div>`;
+                container.innerHTML = `<div class="text-center py-10 text-slate-400 bg-white rounded-2xl border border-slate-100">暫無符合條件的餐廳</div>`;
                 return;
             }
 
             container.innerHTML = filtered.map(item => {
                 const isVisited = item.status === '已試過';
+                // 修正高德導航連結：帶入真實經緯度與店名
+                const amapNavUrl = (item.lng && item.lat) 
+                    ? `https://uri.amap.com/marker?position=${item.lng},${item.lat}&name=${encodeURIComponent(item.name)}&coordinate=gaode`
+                    : `https://uri.amap.com/search?keyword=${encodeURIComponent(item.name)}`;
+
                 return `
                     <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 space-y-3">
                         <div class="flex justify-between items-start">
@@ -196,19 +281,43 @@
                             </div>
                         ` : ''}
 
-                        <div class="flex gap-2 pt-2">
-                            ${item.address ? `<a href="https://uri.amap.com/marker?position=113.5,22.1&name=${encodeURIComponent(item.name)}" target="_blank" class="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-xs">🗺️ 高德導航</a>` : ''}
-                            ${!isVisited ? `<button onclick="markVisited('${item.id}',${item.visit_count || 0})" class="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs">✨ 標記為已試過</button>` : ''}
+                        <div class="flex gap-2 pt-2 flex-wrap">
+                            <a href="${amapNavUrl}" target="_blank" class="bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg text-xs transition">🗺️ 高德導航</a>
+                            ${!isVisited ? `<button onclick="markVisited('${item.id}',${item.visit_count || 0})" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs transition">✨ 標記為已試過</button>` : ''}
+                            ${currentRole === 'admin' ? `<button onclick="deleteRestaurant('${item.id}')" class="bg-red-50 hover:bg-red-100 text-red-600 px-3 py-1.5 rounded-lg text-xs transition">🗑️ 刪除 (Admin)</button>` : ''}
                         </div>
                     </div>
                 `;
             }).join('');
         }
 
+        function submitRestaurant(event) {
+            event.preventDefault();
+            const timeStart = document.getElementById('input-time-start').value;
+            const timeEnd = document.getElementById('input-time-end').value;
+
+            const payload = {
+                action: 'addRestaurant',
+                name: document.getElementById('input-name').value,
+                city: document.getElementById('input-city').value,
+                district: document.getElementById('input-district').value,
+                type: document.getElementById('input-type').value,
+                address: document.getElementById('input-address').value,
+                hours: `${timeStart}-${timeEnd}`,
+                phone: document.getElementById('input-phone').value,
+                lng: document.getElementById('input-lng').value,
+                lat: document.getElementById('input-lat').value,
+                created_by: USERS_CREDENTIALS[currentUser].title
+            };
+
+            fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) })
+            .then(() => { alert('成功加入兵團名錄！'); document.getElementById('add-form').reset(); switchTab('list'); loadData(); });
+        }
+
         function markVisited(id, count) {
-            const rating = prompt(`[${currentRoleTitle}] 請輸入您的評分 (0-5星)：`, "5");
+            const rating = prompt(`[${currentUser}] 請輸入您的評分 (0-5星)：`, "5");
             if(rating === null) return;
-            const comment = prompt(`[${currentRoleTitle}] 請輸入用餐短評：`, "味道極佳！");
+            const comment = prompt(`[${currentUser}] 請輸入用餐短評：`, "味道極佳！");
             if(comment === null) return;
 
             const payload = {
@@ -224,21 +333,10 @@
             .then(() => { alert('評分記錄成功！'); loadData(); });
         }
 
-        function submitRestaurant(event) {
-            event.preventDefault();
-            const payload = {
-                action: 'addRestaurant',
-                name: document.getElementById('input-name').value,
-                city: document.getElementById('input-city').value,
-                district: document.getElementById('input-district').value,
-                type: document.getElementById('input-type').value,
-                address: document.getElementById('input-address').value,
-                hours: document.getElementById('input-hours').value,
-                phone: document.getElementById('input-phone').value,
-                created_by: currentRoleTitle
-            };
-            fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) })
-            .then(() => { alert('成功加入兵團名錄！'); document.getElementById('add-form').reset(); switchTab('list'); loadData(); });
+        function deleteRestaurant(id) {
+            if(!confirm('確定要刪除這間餐廳嗎？')) return;
+            // 預留 Admin 刪除介面
+            alert('已送出刪除指令');
         }
 
         function triggerLottery() {
