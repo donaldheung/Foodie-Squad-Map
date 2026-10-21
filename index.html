@@ -86,7 +86,7 @@
             <div id="restaurant-cards" class="space-y-4"></div>
         </div>
 
-        <!-- 新增餐廳頁 -->
+        <!-- 新增餐廳頁（高德自動抓取電話與營業時間） -->
         <div id="section-add" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hidden space-y-4">
             <h2 class="text-lg font-bold border-b pb-2">新增目標餐廳（高德自動定位）</h2>
             <form id="add-form" onsubmit="submitRestaurant(event)" class="space-y-4">
@@ -117,24 +117,11 @@
                         <input type="text" id="input-address" class="w-full border p-2.5 rounded-lg text-sm mt-1" placeholder="詳細地址">
                     </div>
                     <div>
-                        <div class="flex justify-between items-center">
-                            <label class="text-sm font-medium">營業時間 (開門)</label>
-                            <label class="text-xs text-slate-500 flex items-center gap-1 cursor-pointer">
-                                <input type="checkbox" id="input-time-unknown" onchange="toggleHoursInput(this)"> 暫不設定/未明
-                            </label>
-                        </div>
-                        <select id="input-time-start" class="w-full border p-2.5 rounded-lg text-sm mt-1 bg-slate-50">
-                            <option value="07:00">07:00</option><option value="08:00">08:00</option><option value="09:00">09:00</option><option value="10:00" selected>10:00</option><option value="11:00">11:00</option><option value="12:00">12:00</option><option value="17:00">17:00</option>
-                        </select>
+                        <label class="text-sm font-medium">營業時間 (自動抓取或手動輸入)</label>
+                        <input type="text" id="input-hours" class="w-full border p-2.5 rounded-lg text-sm mt-1" placeholder="例如：10:00 - 22:00">
                     </div>
                     <div>
-                        <label class="text-sm font-medium">營業時間 (關門)</label>
-                        <select id="input-time-end" class="w-full border p-2.5 rounded-lg text-sm mt-1 bg-slate-50">
-                            <option value="21:00">21:00</option><option value="21:30">21:30</option><option value="22:00" selected>22:00</option><option value="22:30">22:30</option><option value="23:00">23:00</option><option value="00:00">00:00</option><option value="02:00">02:00</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="text-sm font-medium">聯絡電話</label>
+                        <label class="text-sm font-medium">聯絡電話 (自動抓取或手動輸入)</label>
                         <input type="text" id="input-phone" class="w-full border p-2.5 rounded-lg text-sm mt-1" placeholder="聯絡電話">
                     </div>
                 </div>
@@ -147,6 +134,52 @@
         <!-- 地圖頁 -->
         <div id="section-map" class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 hidden space-y-3">
             <div id="map"></div>
+        </div>
+    </div>
+
+    <!-- 編輯餐廳 Modal (Admin 專用) -->
+    <div id="edit-rest-modal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 hidden">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-4">
+            <h3 class="text-lg font-bold border-b pb-2">✏️ 編輯餐廳資料 (Admin)</h3>
+            <input type="hidden" id="edit-rest-id">
+            <div class="grid grid-cols-2 gap-3 text-xs">
+                <div class="col-span-2">
+                    <label class="font-medium">餐廳名稱</label>
+                    <input type="text" id="edit-rest-name" class="w-full border p-2 rounded mt-1">
+                </div>
+                <div>
+                    <label class="font-medium">城市</label>
+                    <input type="text" id="edit-rest-city" class="w-full border p-2 rounded mt-1">
+                </div>
+                <div>
+                    <label class="font-medium">細分區域</label>
+                    <input type="text" id="edit-rest-district" class="w-full border p-2 rounded mt-1">
+                </div>
+                <div>
+                    <label class="font-medium">菜式種類</label>
+                    <input type="text" id="edit-rest-type" class="w-full border p-2 rounded mt-1">
+                </div>
+                <div>
+                    <label class="font-medium">聯絡電話</label>
+                    <input type="text" id="edit-rest-phone" class="w-full border p-2 rounded mt-1">
+                </div>
+                <div class="col-span-2">
+                    <label class="font-medium">招牌推介</label>
+                    <input type="text" id="edit-rest-specialty" class="w-full border p-2 rounded mt-1">
+                </div>
+                <div class="col-span-2">
+                    <label class="font-medium">詳細地址</label>
+                    <input type="text" id="edit-rest-address" class="w-full border p-2 rounded mt-1">
+                </div>
+                <div class="col-span-2">
+                    <label class="font-medium">營業時間</label>
+                    <input type="text" id="edit-rest-hours" class="w-full border p-2 rounded mt-1" placeholder="例: 10:00 - 22:00">
+                </div>
+            </div>
+            <div class="flex gap-2 pt-2">
+                <button onclick="saveEditRestaurant()" id="edit-rest-save-btn" class="flex-1 bg-amber-600 text-white py-2 rounded-lg text-sm font-medium">儲存修改</button>
+                <button onclick="document.getElementById('edit-rest-modal').classList.add('hidden')" class="bg-slate-200 px-4 py-2 rounded-lg text-sm">取消</button>
+            </div>
         </div>
     </div>
 
@@ -221,8 +254,8 @@
         let currentRole = 'member';
         let restaurantsData = [];
         let currentRatingRestId = null;
-        let ratingPhotosBase64 = []; // 儲存壓縮後的 Base64
-        let commentPhotosMap = {};   // 交流區 Base64 對應
+        let ratingPhotosBase64 = []; 
+        let commentPhotosMap = {};   
 
         const simToTradMap = {
             '广':'廣','东':'東','区':'區','湾':'灣','门':'門','饭':'飯','店':'店','记':'記','饺':'餃','面':'麵','鲜':'鮮','鱼':'魚','肉':'肉','鸡':'雞',
@@ -248,7 +281,6 @@
             }).then(r => r.json());
         }
 
-        // 本地前端高效圖片壓縮（最大寬高 1000px，畫質極清且體積僅數百 KB）
         function compressFile(file, callback) {
             const reader = new FileReader();
             reader.onload = e => {
@@ -273,14 +305,13 @@
                     canvas.height = height;
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, width, height);
-                    callback(canvas.toDataURL('image/jpeg', 0.8)); // 0.8 完美畫質
+                    callback(canvas.toDataURL('image/jpeg', 0.8));
                 };
                 img.src = e.target.result;
             };
             reader.readAsDataURL(file);
         }
 
-        // 將 Base64 圖片直接發送至 ImgBB API
         async function uploadBase64ToImgBB(base64Data) {
             const pureBase64 = base64Data.replace(/^data:image\/\w+;base64,/, '');
             const formData = new FormData();
@@ -293,7 +324,7 @@
 
             const data = await res.json();
             if (data && data.success) {
-                return data.data.url; // 成功獲得 ImgBB 直鏈
+                return data.data.url;
             } else {
                 throw new Error(data.error?.message || "ImgBB 上傳失敗");
             }
@@ -328,15 +359,18 @@
             });
         }
 
+        // 高德 AutoComplete + PlaceSearch 聯動（精準提取電話與營業時間）
         function initAmapAutocomplete() {
             if (typeof AMap === 'undefined') return;
-            AMap.plugin(['AMap.AutoComplete'], function() {
+            AMap.plugin(['AMap.AutoComplete', 'AMap.PlaceSearch'], function() {
                 var auto = new AMap.AutoComplete({ input: "input-name" });
+                var placeSearch = new AMap.PlaceSearch({});
+
                 auto.on("select", function(e) {
                     if (e.poi) {
                         document.getElementById('input-name').value = toTraditional(e.poi.name || '');
                         document.getElementById('input-address').value = toTraditional(e.poi.address || '');
-                        document.getElementById('input-phone').value = e.poi.tel || '';
+                        
                         if (e.poi.location) {
                             document.getElementById('input-lng').value = e.poi.location.lng;
                             document.getElementById('input-lat').value = e.poi.location.lat;
@@ -349,23 +383,27 @@
                             else if (dist.includes('香港')) document.getElementById('input-city').value = '香港';
                             else document.getElementById('input-city').value = '澳門';
                         }
+
+                        // 用 PlaceSearch 深度抓取電話與營業時間
+                        if (e.poi.id) {
+                            placeSearch.getDetails(e.poi.id, function(status, result) {
+                                if (status === 'complete' && result.info === 'OK') {
+                                    var poiArr = result.poiList.pois;
+                                    if (poiArr && poiArr.length > 0) {
+                                        var detail = poiArr[0];
+                                        if (detail.tel) {
+                                            document.getElementById('input-phone').value = detail.tel;
+                                        }
+                                        if (detail.opentime || (detail.biz_ext && detail.biz_ext.opentime)) {
+                                            document.getElementById('input-hours').value = detail.opentime || detail.biz_ext.opentime;
+                                        }
+                                    }
+                                }
+                            });
+                        }
                     }
                 });
             });
-        }
-
-        function toggleHoursInput(cb) {
-            const start = document.getElementById('input-time-start');
-            const end = document.getElementById('input-time-end');
-            start.disabled = cb.checked;
-            end.disabled = cb.checked;
-            if(cb.checked) {
-                start.classList.add('opacity-50');
-                end.classList.add('opacity-50');
-            } else {
-                start.classList.remove('opacity-50');
-                end.classList.remove('opacity-50');
-            }
         }
 
         function switchTab(tab) {
@@ -460,12 +498,27 @@
                             <div class="font-bold text-slate-700">💬 兵團成員交流區</div>
                             <div class="space-y-1 max-h-40 overflow-y-auto">
                                 ${(!item.comments || item.comments.length === 0) ? '<div class="text-slate-400">暫無留言，快來發表心得！</div>' : 
-                                    item.comments.map(c => `
-                                        <div class="bg-white p-2 rounded border border-slate-100 space-y-1">
-                                            <div class="flex justify-between"><span class="font-semibold text-amber-800">${c.user}</span><span class="text-[9px] text-slate-400">${c.time}</span></div>
-                                            <div>${c.text}</div>${c.photo ? `<img src="${c.photo}" onclick="openImageModal('${c.photo}')" class="w-20 h-20 object-cover rounded mt-1 border cursor-pointer hover:opacity-90 transition">` : ''}
-                                        </div>
-                                    `).join('')
+                                    item.comments.map(c => {
+                                        const canEdit = (c.user === currentUser || currentRole === 'admin');
+                                        const photoList = Array.isArray(c.photos) ? c.photos : (c.photo ? [c.photo] : []);
+                                        return `
+                                            <div class="bg-white p-2 rounded border border-slate-100 space-y-1">
+                                                <div class="flex justify-between items-center">
+                                                    <span class="font-semibold text-amber-800">${c.user}</span>
+                                                    <div class="flex items-center gap-2">
+                                                        <span class="text-[9px] text-slate-400">${c.time}</span>${canEdit ? `<button onclick="editCommentPrompt('${item.id}', '${c.id}', '${escapeQuotes(c.text)}')" class="text-blue-500 hover:text-blue-700 text-[10px] font-bold">✏️ 編輯</button>` : ''}
+                                                        ${canEdit ? `<button onclick="deleteComment('${item.id}', '${c.id}')" class="text-red-500 hover:text-red-700 text-[10px] font-bold">🗑️</button>` : ''}
+                                                    </div>
+                                                </div>
+                                                ${c.text ? `<div>${c.text}</div>` : ''}
+                                                ${photoList.length > 0 ? `
+                                                    <div class="grid grid-cols-4 gap-1 mt-1">
+                                                        ${photoList.map(p => `<img src="${p}" onclick="openImageModal('${p}')" class="w-16 h-16 object-cover rounded border cursor-pointer hover:opacity-90 transition">`).join('')}
+                                                    </div>
+                                                ` : ''}
+                                            </div>
+                                        `;
+                                    }).join('')
                                 }
                             </div>
                             <div class="space-y-2 pt-1">
@@ -486,11 +539,16 @@
                         <div class="flex gap-2 pt-2 flex-wrap">
                             <a href="${amapNavUrl}" target="_blank" class="bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg text-xs transition">🗺️ 高德導航</a>
                             <button onclick="openRatingModal('${item.id}')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs transition">✨ 標記已試過 / 新增評分</button>
-                            ${currentRole === 'admin' ? `<button onclick="deleteRestaurant('${item.id}')" class="bg-red-50 hover:bg-red-100 text-red-600 px-3 py-1.5 rounded-lg text-xs transition">🗑️ 刪除 (Admin)</button>` : ''}
+                            ${currentRole === 'admin' ? `<button onclick="openEditRestModal('${item.id}')" class="bg-amber-50 hover:bg-amber-100 text-amber-700 px-3 py-1.5 rounded-lg text-xs transition">✏️ 編輯餐廳 (Admin)</button>` : ''}
+                            ${currentRole === 'admin' ? `<button onclick="deleteRestaurant('${item.id}')" class="bg-red-50 hover:bg-red-100 text-red-600 px-3 py-1.5 rounded-lg text-xs transition">🗑️ 刪除餐廳 (Admin)</button>` : ''}
                         </div>
                     </div>
                 `;
             }).join('');
+        }
+
+        function escapeQuotes(str) {
+            return (str || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
         }
 
         function togglePhotos(id) {
@@ -533,14 +591,71 @@
             if (userRatings.length === 0) {
                 content.innerHTML = `<div class="text-slate-400 text-center py-4">尚無歷史評分記錄</div>`;
             } else {
-                content.innerHTML = userRatings.reverse().map(r => `
-                    <div class="bg-slate-50 p-3 rounded-xl border space-y-1">
-                        <div class="flex justify-between font-bold text-xs"><span>⭐ ${r.rating}/5 星</span><span class="text-slate-400 text-[10px]">${r.time}</span></div>
-                        <p class="text-xs text-slate-700 italic">"${r.comment}"</p>
-                    </div>
-                `).join('');
+                content.innerHTML = userRatings.reverse().map(r => {
+                    const canEdit = (r.user === currentUser || currentRole === 'admin');
+                    return `
+                        <div class="bg-slate-50 p-3 rounded-xl border space-y-1">
+                            <div class="flex justify-between items-center font-bold text-xs">
+                                <span>⭐ ${r.rating}/5 星</span>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-slate-400 text-[10px]">${r.time}</span>
+                                    ${canEdit ? `<button onclick="editRatingPrompt('${item.id}', '${r.id}', ${r.rating}, '${escapeQuotes(r.comment)}')" class="text-blue-500 hover:text-blue-700 text-[10px] font-bold">✏️ 編輯</button>` : ''}
+                                    ${canEdit ? `<button onclick="deleteRating('${item.id}', '${r.id}')" class="text-red-500 hover:text-red-700 text-[10px] font-bold">🗑️ 刪除</button>` : ''}
+                                </div>
+                            </div>
+                            <p class="text-xs text-slate-700 italic">"${r.comment}"</p>
+                        </div>
+                    `;
+                }).join('');
             }
             document.getElementById('history-modal').classList.remove('hidden');
+        }
+
+        function openEditRestModal(id) {
+            const item = restaurantsData.find(i => i.id === id);
+            if (!item) return;
+
+            document.getElementById('edit-rest-id').value = item.id;
+            document.getElementById('edit-rest-name').value = item.name || '';
+            document.getElementById('edit-rest-city').value = item.city || '';
+            document.getElementById('edit-rest-district').value = item.district || '';
+            document.getElementById('edit-rest-type').value = item.type || '';
+            document.getElementById('edit-rest-phone').value = item.phone || '';
+            document.getElementById('edit-rest-specialty').value = item.specialty || '';
+            document.getElementById('edit-rest-address').value = item.address || '';
+            document.getElementById('edit-rest-hours').value = item.hours || '';
+
+            document.getElementById('edit-rest-modal').classList.remove('hidden');
+        }
+
+        function saveEditRestaurant() {
+            const btn = document.getElementById('edit-rest-save-btn');
+            btn.disabled = true;
+            btn.innerText = '儲存中...';
+
+            const payload = {
+                action: 'editRestaurant',
+                id: document.getElementById('edit-rest-id').value,
+                name: document.getElementById('edit-rest-name').value,
+                city: document.getElementById('edit-rest-city').value,
+                district: document.getElementById('edit-rest-district').value,
+                type: document.getElementById('edit-rest-type').value,
+                phone: document.getElementById('edit-rest-phone').value,
+                specialty: document.getElementById('edit-rest-specialty').value,
+                address: document.getElementById('edit-rest-address').value,
+                hours: document.getElementById('edit-rest-hours').value
+            };
+
+            postForm(payload).then(res => {
+                if (res.status === 'success') {
+                    alert('餐廳資料修訂成功！');
+                    document.getElementById('edit-rest-modal').classList.add('hidden');
+                    loadData();
+                } else { alert('修改失敗：' + res.message); }
+            }).finally(() => {
+                btn.disabled = false;
+                btn.innerText = '儲存修改';
+            });
         }
 
         function submitRestaurant(event) {
@@ -550,10 +665,6 @@
             btn.disabled = true;
             btn.innerText = '寫入雲端中...';
 
-            const isUnknownHours = document.getElementById('input-time-unknown').checked;
-            const timeStart = document.getElementById('input-time-start').value;
-            const timeEnd = document.getElementById('input-time-end').value;
-
             const payload = {
                 action: 'addRestaurant',
                 name: document.getElementById('input-name').value,
@@ -562,8 +673,8 @@
                 type: document.getElementById('input-type').value,
                 specialty: document.getElementById('input-specialty').value,
                 address: document.getElementById('input-address').value,
-                hours: isUnknownHours ? '未明' : `${timeStart}-${timeEnd}`,
-                phone: document.getElementById('input-phone').value,
+                hours: document.getElementById('input-hours').value || '未明',
+                phone: document.getElementById('input-phone').value || '無',
                 lng: document.getElementById('input-lng').value,
                 lat: document.getElementById('input-lat').value,
                 created_by: currentUser
@@ -572,7 +683,6 @@
             postForm(payload).then(() => {
                 alert('成功加入兵團名錄！');
                 document.getElementById('add-form').reset();
-                toggleHoursInput({ checked: false });
                 btn.disabled = false;
                 btn.innerText = '確認新增並寫入雲端';
                 switchTab('list');
@@ -660,7 +770,6 @@
             }
         }
 
-        // 提交評分（先將壓縮後的 Base64 上傳 ImgBB 獲取短網址，再寫入 Google Sheets）
         async function submitRating() {
             const btn = document.getElementById('rating-submit-btn');
             if (btn.disabled) return;
@@ -672,7 +781,6 @@
             const comment = document.getElementById('rating-comment').value;
 
             try {
-                // 1. 逐張上傳 ImgBB 獲取永久公開短網址
                 let uploadedUrls = [];
                 for (let b64 of ratingPhotosBase64) {
                     const url = await uploadBase64ToImgBB(b64);
@@ -681,13 +789,17 @@
 
                 btn.innerText = '儲存評分至雲端...';
 
-                // 2. 打包資料發送去 GAS
                 const payload = {
                     action: 'updateRestaurantWithPhotos',
                     id: currentRatingRestId,
                     status: '已試過',
-                    visit_count: (item ? item.visit_count || 0 : 0) + 1,
-                    new_rating: { user: currentUser, rating: score, comment: comment, time: new Date().toLocaleString() },
+                    new_rating: { 
+                        id: 'RATE_' + new Date().getTime(),
+                        user: currentUser, 
+                        rating: score, 
+                        comment: comment, 
+                        time: new Date().toLocaleString() 
+                    },
                     photos: uploadedUrls
                 };
 
@@ -708,7 +820,6 @@
             }
         }
 
-        // 交流區發布（Base64 上傳 ImgBB）
         async function postComment(id) {
             const textInput = document.getElementById(`comment-input-${id}`);
             const btn = document.getElementById(`comment-btn-${id}`);
@@ -731,7 +842,7 @@
                     action: 'addCommentWithPhotos',
                     id: id,
                     user: currentUser,
-                    text: text || '附圖',
+                    text: text,
                     photos: uploadedUrls
                 };
 
@@ -751,6 +862,56 @@
                 btn.disabled = false;
                 btn.innerText = '發布';
             }
+        }
+
+        function editCommentPrompt(restId, commentId, oldText) {
+            const newText = prompt('請輸入修改後的留言內容：', oldText);
+            if (newText === null || newText.trim() === '') return;
+            postForm({ action: 'editComment', restId: restId, commentId: commentId, newText: newText.trim() }).then(res => {
+                if(res.status === 'success') {
+                    alert('已成功修改留言！');
+                    loadData();
+                } else { alert('修改失敗：' + res.message); }
+            });
+        }
+
+        function editRatingPrompt(restId, ratingId, oldScore, oldComment) {
+            const newScoreStr = prompt('請輸入修訂後的星級評分 (0.5 - 5.0)：', oldScore);
+            if (newScoreStr === null) return;
+            const newScore = parseFloat(newScoreStr);
+            if (isNaN(newScore) || newScore < 0.5 || newScore > 5.0) { alert('請輸入有效星級！'); return; }
+
+            const newComment = prompt('請輸入修訂後的短評：', oldComment);
+            if (newComment === null) return;
+
+            postForm({ action: 'editRating', restId: restId, ratingId: ratingId, newRating: newScore, newComment: newComment.trim() }).then(res => {
+                if(res.status === 'success') {
+                    alert('已成功修改評分！');
+                    document.getElementById('history-modal').classList.add('hidden');
+                    loadData();
+                } else { alert('修改失敗：' + res.message); }
+            });
+        }
+
+        function deleteComment(restId, commentId) {
+            if(!confirm('確定要刪除這條留言嗎？')) return;
+            postForm({ action: 'deleteComment', restId: restId, commentId: commentId }).then(res => {
+                if(res.status === 'success') {
+                    alert('已成功刪除留言！');
+                    loadData();
+                } else { alert('刪除失敗：' + res.message); }
+            });
+        }
+
+        function deleteRating(restId, ratingId) {
+            if(!confirm('確定要刪除這次評分記錄嗎？')) return;
+            postForm({ action: 'deleteRating', restId: restId, ratingId: ratingId }).then(res => {
+                if(res.status === 'success') {
+                    alert('已成功刪除評分！');
+                    document.getElementById('history-modal').classList.add('hidden');
+                    loadData();
+                } else { alert('刪除失敗：' + res.message); }
+            });
         }
 
         function deleteRestaurant(id) {
@@ -774,7 +935,7 @@
                     <div>📞 <b>聯絡電話：</b>${pick.phone || '無'}</div>
                 </div>
             `;
-            document.getElementById('lottery-modal').classList.remove('hidden');
+            document.getElementById('lottery-modal').classList.add('hidden');
         }
 
         function initAmap() {
