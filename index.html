@@ -172,7 +172,7 @@
                     <textarea id="rating-comment" class="w-full border p-2 rounded text-sm mt-1" placeholder="寫下食後感..."></textarea>
                 </div>
                 <div>
-                    <label class="text-xs font-medium">上傳當次相片 (可多選，將上傳至 ImgBB)</label>
+                    <label class="text-xs font-medium">上傳當次相片 (可多選)</label>
                     <input type="file" id="rating-file-input" accept="image/*" multiple class="w-full border p-1.5 rounded text-xs mt-1 bg-slate-50" onchange="handleRatingPhotos(this)">
                     <div id="rating-photo-preview" class="grid grid-cols-4 gap-2 mt-2"></div>
                 </div>
@@ -221,8 +221,8 @@
         let currentRole = 'member';
         let restaurantsData = [];
         let currentRatingRestId = null;
-        let ratingPhotoFiles = [];  // 儲存待上傳的 File 物件
-        let commentPhotoFilesMap = {}; // 交流區待上傳 File 對應
+        let ratingPhotosBase64 = []; // 儲存壓縮後的 Base64
+        let commentPhotosMap = {};   // 交流區 Base64 對應
 
         const simToTradMap = {
             '广':'廣','东':'東','区':'區','湾':'灣','门':'門','饭':'飯','店':'店','记':'記','饺':'餃','面':'麵','鲜':'鮮','鱼':'魚','肉':'肉','鸡':'雞',
@@ -248,17 +248,52 @@
             }).then(r => r.json());
         }
 
-        // 上傳單張圖片至 ImgBB 並返回 URL 直鏈
-        async function uploadSingleToImgBB(file) {
+        // 本地前端高效圖片壓縮（最大寬高 1000px，畫質極清且體積僅數百 KB）
+        function compressFile(file, callback) {
+            const reader = new FileReader();
+            reader.onload = e => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const MAX = 1000;
+                    let width = img.width;
+                    let height = img.height;
+                    
+                    if (width > MAX || height > MAX) {
+                        if (width > height) {
+                            height = Math.round(height * (MAX / width));
+                            width = MAX;
+                        } else {
+                            width = Math.round(width * (MAX / height));
+                            height = MAX;
+                        }
+                    }
+                    
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    callback(canvas.toDataURL('image/jpeg', 0.8)); // 0.8 完美畫質
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // 將 Base64 圖片直接發送至 ImgBB API
+        async function uploadBase64ToImgBB(base64Data) {
+            const pureBase64 = base64Data.replace(/^data:image\/\w+;base64,/, '');
             const formData = new FormData();
-            formData.append("image", file);
+            formData.append("image", pureBase64);
+
             const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
                 method: "POST",
                 body: formData
             });
+
             const data = await res.json();
             if (data && data.success) {
-                return data.data.url;
+                return data.data.url; // 成功獲得 ImgBB 直鏈
             } else {
                 throw new Error(data.error?.message || "ImgBB 上傳失敗");
             }
@@ -550,7 +585,7 @@
 
         function openRatingModal(id) {
             currentRatingRestId = id;
-            ratingPhotoFiles = [];
+            ratingPhotosBase64 = [];
             setRating(5.0);
             document.getElementById('rating-comment').value = '';
             document.getElementById('rating-photo-preview').innerHTML = '';
@@ -570,64 +605,62 @@
         function handleRatingPhotos(input) {
             if (input.files && input.files.length > 0) {
                 Array.from(input.files).forEach(file => {
-                    ratingPhotoFiles.push(file);
+                    compressFile(file, base64 => {
+                        ratingPhotosBase64.push(base64);
+                        renderRatingPhotoPreview();
+                    });
                 });
-                renderRatingPhotoPreview();
                 input.value = '';
             }
         }
 
         function renderRatingPhotoPreview() {
             const preview = document.getElementById('rating-photo-preview');
-            preview.innerHTML = ratingPhotoFiles.map((file, idx) => {
-                const url = URL.createObjectURL(file);
-                return `
-                    <div class="relative group">
-                        <img src="${url}" onclick="openImageModal('${url}')" class="w-full h-16 object-cover rounded-lg border cursor-pointer">
-                        <button onclick="removeRatingPhoto(${idx})" class="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold shadow z-10">✕</button>
-                    </div>
-                `;
-            }).join('');
+            preview.innerHTML = ratingPhotosBase64.map((img, idx) => `
+                <div class="relative group">
+                    <img src="${img}" onclick="openImageModal('${img}')" class="w-full h-16 object-cover rounded-lg border cursor-pointer">
+                    <button onclick="removeRatingPhoto(${idx})" class="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold shadow z-10">✕</button>
+                </div>
+            `).join('');
         }
 
         function removeRatingPhoto(index) {
-            ratingPhotoFiles.splice(index, 1);
+            ratingPhotosBase64.splice(index, 1);
             renderRatingPhotoPreview();
         }
 
         function handleCommentPhotos(id, input) {
             if (input.files && input.files.length > 0) {
-                if (!commentPhotoFilesMap[id]) commentPhotoFilesMap[id] = [];
+                if (!commentPhotosMap[id]) commentPhotosMap[id] = [];
                 Array.from(input.files).forEach(file => {
-                    commentPhotoFilesMap[id].push(file);
+                    compressFile(file, base64 => {
+                        commentPhotosMap[id].push(base64);
+                        renderCommentPhotoPreview(id);
+                    });
                 });
-                renderCommentPhotoPreview(id);
                 input.value = '';
             }
         }
 
         function renderCommentPhotoPreview(id) {
             const preview = document.getElementById(`comment-preview-${id}`);
-            if(!preview || !commentPhotoFilesMap[id]) return;
-            preview.innerHTML = commentPhotoFilesMap[id].map((file, idx) => {
-                const url = URL.createObjectURL(file);
-                return `
-                    <div class="relative inline-block">
-                        <img src="${url}" onclick="openImageModal('${url}')" class="w-12 h-12 object-cover rounded border cursor-pointer">
-                        <button onclick="removeCommentPhoto('${id}', ${idx})" class="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold shadow">✕</button>
-                    </div>
-                `;
-            }).join('');
+            if(!preview || !commentPhotosMap[id]) return;
+            preview.innerHTML = commentPhotosMap[id].map((img, idx) => `
+                <div class="relative inline-block">
+                    <img src="${img}" onclick="openImageModal('${img}')" class="w-12 h-12 object-cover rounded border cursor-pointer">
+                    <button onclick="removeCommentPhoto('${id}', ${idx})" class="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold shadow">✕</button>
+                </div>
+            `).join('');
         }
 
         function removeCommentPhoto(id, idx) {
-            if (commentPhotoFilesMap[id]) {
-                commentPhotoFilesMap[id].splice(idx, 1);
+            if (commentPhotosMap[id]) {
+                commentPhotosMap[id].splice(idx, 1);
                 renderCommentPhotoPreview(id);
             }
         }
 
-        // 提交評分（先上傳 ImgBB 獲取直鏈，再寫入 Google Sheets）
+        // 提交評分（先將壓縮後的 Base64 上傳 ImgBB 獲取短網址，再寫入 Google Sheets）
         async function submitRating() {
             const btn = document.getElementById('rating-submit-btn');
             if (btn.disabled) return;
@@ -639,28 +672,28 @@
             const comment = document.getElementById('rating-comment').value;
 
             try {
-                // 1. 先將待上傳相片逐張上傳至 ImgBB 拎 URL
-                let uploadedPhotoUrls = [];
-                for (let file of ratingPhotoFiles) {
-                    const url = await uploadSingleToImgBB(file);
-                    if (url) uploadedPhotoUrls.push(url);
+                // 1. 逐張上傳 ImgBB 獲取永久公開短網址
+                let uploadedUrls = [];
+                for (let b64 of ratingPhotosBase64) {
+                    const url = await uploadBase64ToImgBB(b64);
+                    if (url) uploadedUrls.push(url);
                 }
 
                 btn.innerText = '儲存評分至雲端...';
 
-                // 2. 組合 Payload 傳至 GAS
+                // 2. 打包資料發送去 GAS
                 const payload = {
                     action: 'updateRestaurantWithPhotos',
                     id: currentRatingRestId,
                     status: '已試過',
                     visit_count: (item ? item.visit_count || 0 : 0) + 1,
                     new_rating: { user: currentUser, rating: score, comment: comment, time: new Date().toLocaleString() },
-                    photos: uploadedPhotoUrls
+                    photos: uploadedUrls
                 };
 
                 const res = await postForm(payload);
                 if(res.status === 'success') {
-                    alert('評分與相片已成功上傳並儲存！');
+                    alert('評分與相片已成功儲存！');
                     document.getElementById('rating-modal').classList.add('hidden');
                     loadData();
                 } else {
@@ -668,46 +701,44 @@
                 }
             } catch (err) {
                 console.error(err);
-                alert('上傳或儲存失敗：' + err.message);
+                alert('上傳失敗，請重試：' + err.message);
             } finally {
                 btn.disabled = false;
                 btn.innerText = '提交評分';
             }
         }
 
-        // 交流區發布（先上傳 ImgBB 獲取直鏈，再寫入 Google Sheets）
+        // 交流區發布（Base64 上傳 ImgBB）
         async function postComment(id) {
             const textInput = document.getElementById(`comment-input-${id}`);
             const btn = document.getElementById(`comment-btn-${id}`);
             const text = textInput.value.trim();
-            const files = commentPhotoFilesMap[id] || [];
+            const b64Photos = commentPhotosMap[id] || [];
 
-            if(!text && files.length === 0) return;
+            if(!text && b64Photos.length === 0) return;
 
             btn.disabled = true;
-            btn.innerText = '上傳中...';
+            btn.innerText = '發布中...';
 
             try {
-                // 1. 上傳相片到 ImgBB
-                let uploadedPhotoUrls = [];
-                for (let file of files) {
-                    const url = await uploadSingleToImgBB(file);
-                    if (url) uploadedPhotoUrls.push(url);
+                let uploadedUrls = [];
+                for (let b64 of b64Photos) {
+                    const url = await uploadBase64ToImgBB(b64);
+                    if (url) uploadedUrls.push(url);
                 }
 
-                // 2. 發送留言到 GAS
                 const payload = {
                     action: 'addCommentWithPhotos',
                     id: id,
                     user: currentUser,
                     text: text || '附圖',
-                    photos: uploadedPhotoUrls
+                    photos: uploadedUrls
                 };
 
                 const res = await postForm(payload);
                 if(res.status === 'success') {
                     textInput.value = '';
-                    commentPhotoFilesMap[id] = [];
+                    commentPhotosMap[id] = [];
                     renderCommentPhotoPreview(id);
                     loadData();
                 } else {
