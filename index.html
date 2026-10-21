@@ -172,7 +172,7 @@
                     <textarea id="rating-comment" class="w-full border p-2 rounded text-sm mt-1" placeholder="寫下食後感..."></textarea>
                 </div>
                 <div>
-                    <label class="text-xs font-medium">上傳當次相片 (可多選)</label>
+                    <label class="text-xs font-medium">上傳當次相片 (可多選，將上傳至 ImgBB)</label>
                     <input type="file" id="rating-file-input" accept="image/*" multiple class="w-full border p-1.5 rounded text-xs mt-1 bg-slate-50" onchange="handleRatingPhotos(this)">
                     <div id="rating-photo-preview" class="grid grid-cols-4 gap-2 mt-2"></div>
                 </div>
@@ -215,13 +215,14 @@
 
     <script>
         const GAS_URL = 'https://script.google.com/macros/s/AKfycbydk9NCtPJwIuPGFGQm5smpaRd-vbr_i-a1CUO9M9VumDqSiEp1LKhHfWDidikoLs-6/exec';
+        const IMGBB_API_KEY = '26fadf42e38a262ad63b2987ed673889';
 
         let currentUser = null;
         let currentRole = 'member';
         let restaurantsData = [];
         let currentRatingRestId = null;
-        let ratingPhotosBase64 = []; // 儲存壓縮後的 Base64
-        let commentPhotosMap = {};  // 交流區 Base64 對應
+        let ratingPhotoFiles = [];  // 儲存待上傳的 File 物件
+        let commentPhotoFilesMap = {}; // 交流區待上傳 File 對應
 
         const simToTradMap = {
             '广':'廣','东':'東','区':'區','湾':'灣','门':'門','饭':'飯','店':'店','记':'記','饺':'餃','面':'麵','鲜':'鮮','鱼':'魚','肉':'肉','鸡':'雞',
@@ -247,36 +248,20 @@
             }).then(r => r.json());
         }
 
-        // 核心：智慧壓縮圖片至適當大小（維持高清但體積極小，保證 100% 成功直存）
-        function compressFile(file, callback) {
-            const reader = new FileReader();
-            reader.onload = e => {
-                const img = new Image();
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    const MAX = 1000; // 限制最大寬高 1000px，畫質清晰且體積極輕
-                    let width = img.width;
-                    let height = img.height;
-                    
-                    if (width > MAX || height > MAX) {
-                        if (width > height) {
-                            height = Math.round(height * (MAX / width));
-                            width = MAX;
-                        } else {
-                            width = Math.round(width * (MAX / height));
-                            height = MAX;
-                        }
-                    }
-                    
-                    canvas.width = width;
-                    canvas.height = height;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0, width, height);
-                    callback(canvas.toDataURL('image/jpeg', 0.7)); // 0.7 壓縮率，肉眼極清
-                };
-                img.src = e.target.result;
-            };
-            reader.readAsDataURL(file);
+        // 上傳單張圖片至 ImgBB 並返回 URL 直鏈
+        async function uploadSingleToImgBB(file) {
+            const formData = new FormData();
+            formData.append("image", file);
+            const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
+                method: "POST",
+                body: formData
+            });
+            const data = await res.json();
+            if (data && data.success) {
+                return data.data.url;
+            } else {
+                throw new Error(data.error?.message || "ImgBB 上傳失敗");
+            }
         }
 
         window.onload = function() {
@@ -565,7 +550,7 @@
 
         function openRatingModal(id) {
             currentRatingRestId = id;
-            ratingPhotosBase64 = [];
+            ratingPhotoFiles = [];
             setRating(5.0);
             document.getElementById('rating-comment').value = '';
             document.getElementById('rating-photo-preview').innerHTML = '';
@@ -585,135 +570,155 @@
         function handleRatingPhotos(input) {
             if (input.files && input.files.length > 0) {
                 Array.from(input.files).forEach(file => {
-                    compressFile(file, base64 => {
-                        ratingPhotosBase64.push(base64);
-                        renderRatingPhotoPreview();
-                    });
+                    ratingPhotoFiles.push(file);
                 });
+                renderRatingPhotoPreview();
                 input.value = '';
             }
         }
 
         function renderRatingPhotoPreview() {
             const preview = document.getElementById('rating-photo-preview');
-            preview.innerHTML = ratingPhotosBase64.map((img, idx) => `
-                <div class="relative group">
-                    <img src="${img}" onclick="openImageModal('${img}')" class="w-full h-16 object-cover rounded-lg border cursor-pointer">
-                    <button onclick="removeRatingPhoto(${idx})" class="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold shadow z-10">✕</button>
-                </div>
-            `).join('');
+            preview.innerHTML = ratingPhotoFiles.map((file, idx) => {
+                const url = URL.createObjectURL(file);
+                return `
+                    <div class="relative group">
+                        <img src="${url}" onclick="openImageModal('${url}')" class="w-full h-16 object-cover rounded-lg border cursor-pointer">
+                        <button onclick="removeRatingPhoto(${idx})" class="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold shadow z-10">✕</button>
+                    </div>
+                `;
+            }).join('');
         }
 
         function removeRatingPhoto(index) {
-            ratingPhotosBase64.splice(index, 1);
+            ratingPhotoFiles.splice(index, 1);
             renderRatingPhotoPreview();
         }
 
         function handleCommentPhotos(id, input) {
             if (input.files && input.files.length > 0) {
-                if (!commentPhotosMap[id]) commentPhotosMap[id] = [];
+                if (!commentPhotoFilesMap[id]) commentPhotoFilesMap[id] = [];
                 Array.from(input.files).forEach(file => {
-                    compressFile(file, base64 => {
-                        commentPhotosMap[id].push(base64);
-                        renderCommentPhotoPreview(id);
-                    });
+                    commentPhotoFilesMap[id].push(file);
                 });
+                renderCommentPhotoPreview(id);
                 input.value = '';
             }
         }
 
         function renderCommentPhotoPreview(id) {
             const preview = document.getElementById(`comment-preview-${id}`);
-            if(!preview || !commentPhotosMap[id]) return;
-            preview.innerHTML = commentPhotosMap[id].map((img, idx) => `
-                <div class="relative inline-block">
-                    <img src="${img}" onclick="openImageModal('${img}')" class="w-12 h-12 object-cover rounded border cursor-pointer">
-                    <button onclick="removeCommentPhoto('${id}', ${idx})" class="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold shadow">✕</button>
-                </div>
-            `).join('');
+            if(!preview || !commentPhotoFilesMap[id]) return;
+            preview.innerHTML = commentPhotoFilesMap[id].map((file, idx) => {
+                const url = URL.createObjectURL(file);
+                return `
+                    <div class="relative inline-block">
+                        <img src="${url}" onclick="openImageModal('${url}')" class="w-12 h-12 object-cover rounded border cursor-pointer">
+                        <button onclick="removeCommentPhoto('${id}', ${idx})" class="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold shadow">✕</button>
+                    </div>
+                `;
+            }).join('');
         }
 
         function removeCommentPhoto(id, idx) {
-            if (commentPhotosMap[id]) {
-                commentPhotosMap[id].splice(idx, 1);
+            if (commentPhotoFilesMap[id]) {
+                commentPhotoFilesMap[id].splice(idx, 1);
                 renderCommentPhotoPreview(id);
             }
         }
 
-        // 提交評分（智慧壓縮後直接與評分一起存入 Google Sheets）
+        // 提交評分（先上傳 ImgBB 獲取直鏈，再寫入 Google Sheets）
         async function submitRating() {
             const btn = document.getElementById('rating-submit-btn');
             if (btn.disabled) return;
             btn.disabled = true;
-            btn.innerText = '儲存評分與相片中...';
+            btn.innerText = '相片上傳至 ImgBB 中...';
 
             const item = restaurantsData.find(i => i.id === currentRatingRestId);
             const score = parseFloat(document.getElementById('rating-score').value);
             const comment = document.getElementById('rating-comment').value;
 
             try {
+                // 1. 先將待上傳相片逐張上傳至 ImgBB 拎 URL
+                let uploadedPhotoUrls = [];
+                for (let file of ratingPhotoFiles) {
+                    const url = await uploadSingleToImgBB(file);
+                    if (url) uploadedPhotoUrls.push(url);
+                }
+
+                btn.innerText = '儲存評分至雲端...';
+
+                // 2. 組合 Payload 傳至 GAS
                 const payload = {
                     action: 'updateRestaurantWithPhotos',
                     id: currentRatingRestId,
                     status: '已試過',
                     visit_count: (item ? item.visit_count || 0 : 0) + 1,
                     new_rating: { user: currentUser, rating: score, comment: comment, time: new Date().toLocaleString() },
-                    photos: ratingPhotosBase64
+                    photos: uploadedPhotoUrls
                 };
 
                 const res = await postForm(payload);
                 if(res.status === 'success') {
-                    alert('評分與相片已成功儲存！');
+                    alert('評分與相片已成功上傳並儲存！');
                     document.getElementById('rating-modal').classList.add('hidden');
                     loadData();
                 } else {
                     alert('提交失敗：' + res.message);
                 }
-                btn.disabled = false;
-                btn.innerText = '提交評分';
             } catch (err) {
+                console.error(err);
+                alert('上傳或儲存失敗：' + err.message);
+            } finally {
                 btn.disabled = false;
                 btn.innerText = '提交評分';
-                alert('儲存失敗，請重試！');
             }
         }
 
-        // 交流區發布
+        // 交流區發布（先上傳 ImgBB 獲取直鏈，再寫入 Google Sheets）
         async function postComment(id) {
             const textInput = document.getElementById(`comment-input-${id}`);
             const btn = document.getElementById(`comment-btn-${id}`);
             const text = textInput.value.trim();
-            const photos = commentPhotosMap[id] || [];
+            const files = commentPhotoFilesMap[id] || [];
 
-            if(!text && photos.length === 0) return;
+            if(!text && files.length === 0) return;
 
             btn.disabled = true;
-            btn.innerText = '發布中...';
+            btn.innerText = '上傳中...';
 
             try {
+                // 1. 上傳相片到 ImgBB
+                let uploadedPhotoUrls = [];
+                for (let file of files) {
+                    const url = await uploadSingleToImgBB(file);
+                    if (url) uploadedPhotoUrls.push(url);
+                }
+
+                // 2. 發送留言到 GAS
                 const payload = {
                     action: 'addCommentWithPhotos',
                     id: id,
                     user: currentUser,
-                    text: text || '上傳相片',
-                    photos: photos
+                    text: text || '附圖',
+                    photos: uploadedPhotoUrls
                 };
 
                 const res = await postForm(payload);
                 if(res.status === 'success') {
                     textInput.value = '';
-                    commentPhotosMap[id] = [];
+                    commentPhotoFilesMap[id] = [];
                     renderCommentPhotoPreview(id);
                     loadData();
                 } else {
                     alert('發布失敗：' + res.message);
                 }
-                btn.disabled = false;
-                btn.innerText = '發布';
             } catch(e) {
+                console.error(e);
+                alert('發布失敗：' + e.message);
+            } finally {
                 btn.disabled = false;
                 btn.innerText = '發布';
-                alert('發布失敗，請重試！');
             }
         }
 
@@ -738,7 +743,7 @@
                     <div>📞 <b>聯絡電話：</b>${pick.phone || '無'}</div>
                 </div>
             `;
-            document.getElementById('lottery-modal').classList.add('hidden');
+            document.getElementById('lottery-modal').classList.remove('hidden');
         }
 
         function initAmap() {
